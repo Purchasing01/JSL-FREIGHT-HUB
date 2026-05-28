@@ -3797,26 +3797,42 @@ function exportData(){
   }
 }
 
-// Import a previously exported JSON file. Replaces current state entirely.
+// Import a previously exported JSON file. Replaces current state entirely — syncs to Supabase.
 function importData(file){
   if(!file){showToast('No file selected','error');return;}
   const reader=new FileReader();
-  reader.onload=(e)=>{
+  reader.onload=async (e)=>{
     try{
       const data=JSON.parse(e.target.result);
       if(!data||!Array.isArray(data.shipments)){
         showToast('Invalid backup file — missing shipments','error');
         return;
       }
-      // Confirm before replacing
-      const msg=`This will REPLACE your current data:\n\n• Current: ${shipments.length} shipments, ${transfers.length} transfers\n• From backup: ${(data.shipments||[]).length} shipments, ${(data.transfers||[]).length} transfers\n\nContinue?`;
+      const msg=`This will REPLACE all current data:\n\n• Current: ${shipments.length} shipments, ${transfers.length} transfers\n• From backup: ${(data.shipments||[]).length} shipments, ${(data.transfers||[]).length} transfers\n\nThis will update the shared database for ALL users.\n\nContinue?`;
       if(!confirm(msg))return;
       shipments=data.shipments;
       transfers=Array.isArray(data.transfers)?data.transfers:[];
       vendors=Array.isArray(data.vendors)?data.vendors:vendors;
       if(typeof data.nextId==='number'&&data.nextId>0)nextId=data.nextId;
       if(typeof data.nextTrId==='number'&&data.nextTrId>0)nextTrId=data.nextTrId;
-      saveToStorage();
+      // Show uploading state
+      flashSaveStatus('saving');
+      showToast('Uploading to Supabase…','info');
+      // Push to Supabase first
+      if(_supabaseOk){
+        try{
+          await _saveToSupabase();
+          showToast(`✓ Imported & synced to cloud — ${shipments.length} shipments, ${transfers.length} transfers`,'success');
+        }catch(err){
+          console.error('Supabase import sync failed:',err);
+          showToast(`Imported locally but cloud sync failed — try Export & Import again`,'error');
+        }
+      }else{
+        showToast(`Backup restored — ${shipments.length} shipments, ${transfers.length} transfers`,'success');
+      }
+      // Also update localStorage cache
+      try{localStorage.setItem(STORAGE_KEY,JSON.stringify(buildSnapshot()));}catch(e){}
+      flashSaveStatus('saved');
       // Re-render everything
       populateVendorSelect();
       populateCompareSel();
@@ -3825,7 +3841,6 @@ function importData(file){
       renderTransfers();
       updateHeaderStats();
       updateNavBadges();
-      showToast(`Backup restored — ${shipments.length} shipments, ${transfers.length} transfers`,'success');
     }catch(err){
       console.error('importData parse failed:',err);
       showToast('Could not read backup file — invalid JSON','error');
@@ -3835,16 +3850,29 @@ function importData(file){
   reader.readAsText(file);
 }
 
-// Reset to SEED data (factory reset). Useful if data gets corrupted.
-function resetToFactoryData(){
-  if(!confirm('This will DELETE all your data and reset to the original demo data.\n\nYou will lose all shipments and transfers you added.\n\nAre you sure?'))return;
+// Reset to SEED data — clears Supabase and re-seeds.
+async function resetToFactoryData(){
+  if(!confirm('This will DELETE all data for ALL users and reset to the original demo data.\n\nAre you sure?'))return;
   if(!confirm('Last chance — really reset everything?'))return;
   shipments=JSON.parse(JSON.stringify(SEED));
   vendors=JSON.parse(JSON.stringify(SEED_VENDORS));
   transfers=[];
   nextId=32;
   nextTrId=1;
-  saveToStorage();
+  flashSaveStatus('saving');
+  if(_supabaseOk){
+    try{
+      await _saveToSupabase();
+      showToast('Reset to factory data complete — cloud updated','warn');
+    }catch(e){
+      console.error('Supabase reset failed:',e);
+      showToast('Reset locally but cloud sync failed','error');
+    }
+  }else{
+    showToast('Reset to factory data complete','warn');
+  }
+  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(buildSnapshot()));}catch(e){}
+  flashSaveStatus('saved');
   populateVendorSelect();
   populateCompareSel();
   renderHistory();
@@ -3852,7 +3880,6 @@ function resetToFactoryData(){
   renderTransfers();
   updateHeaderStats();
   updateNavBadges();
-  showToast('Reset to factory data complete','warn');
 }
 
 // Trigger hidden file picker for import

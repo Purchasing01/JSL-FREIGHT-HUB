@@ -3695,52 +3695,49 @@ function saveToStorage(){
 
 async function _saveToSupabase(){
   if(!_sb)return;
-  // Delete all then insert fresh (simple & reliable for <200 rows)
-  await _sb.from('shipments').delete().gte('id',0);
-  if(shipments.length){
-    const{error}=await _sb.from('shipments').insert(shipments.map(s=>({data:s})));
-    if(error)throw error;
+  // Store entire state as one JSON blob in app_meta — mirrors localStorage exactly
+  const state={
+    shipments:shipments,
+    transfers:transfers,
+    vendors:vendors,
+    nextId:nextId,
+    nextTrId:nextTrId
+  };
+  const{error}=await _sb.from('app_meta').upsert({
+    key:'app_state',
+    value:state,
+    updated_at:new Date().toISOString()
+  });
+  if(error){
+    console.error('Supabase save error:',error);
+    throw error;
   }
-  await _sb.from('transfers').delete().gte('id',0);
-  if(transfers.length){
-    const{error}=await _sb.from('transfers').insert(transfers.map(t=>({data:t})));
-    if(error)throw error;
-  }
-  await _sb.from('vendors').delete().gte('id',0);
-  if(vendors.length){
-    const{error}=await _sb.from('vendors').insert(vendors.map(v=>({data:v})));
-    if(error)throw error;
-  }
-  await _sb.from('app_meta').upsert({key:'nextId',value:nextId,updated_at:new Date().toISOString()});
-  await _sb.from('app_meta').upsert({key:'nextTrId',value:nextTrId,updated_at:new Date().toISOString()});
+  console.log('✓ Saved to Supabase:',shipments.length,'shipments,',transfers.length,'transfers');
 }
 
 // ── Load: Supabase first → localStorage fallback → SEED ──
 async function loadFromSupabase(){
   if(!_sb){_supabaseOk=false;return false;}
   try{
-    const{data:shipRows,error:e1}=await _sb.from('shipments').select('data');
-    if(e1)throw e1;
-    if(shipRows&&shipRows.length>0){
-      shipments=shipRows.map(r=>r.data);
-      const{data:trRows}=await _sb.from('transfers').select('data');
-      if(trRows)transfers=trRows.map(r=>r.data);
-      const{data:vRows}=await _sb.from('vendors').select('data');
-      if(vRows&&vRows.length>0)vendors=vRows.map(r=>r.data);
-      const{data:metaRows}=await _sb.from('app_meta').select('*');
-      if(metaRows){
-        const nid=metaRows.find(m=>m.key==='nextId');
-        const ntid=metaRows.find(m=>m.key==='nextTrId');
-        if(nid&&typeof nid.value==='number')nextId=nid.value;
-        if(ntid&&typeof ntid.value==='number')nextTrId=ntid.value;
-      }
+    const{data,error}=await _sb.from('app_meta').select('value').eq('key','app_state').maybeSingle();
+    if(error){
+      console.error('Supabase load error:',JSON.stringify(error));
+      throw error;
+    }
+    if(data&&data.value){
+      const state=data.value;
+      if(Array.isArray(state.shipments)&&state.shipments.length>0)shipments=state.shipments;
+      if(Array.isArray(state.transfers))transfers=state.transfers;
+      if(Array.isArray(state.vendors)&&state.vendors.length>0)vendors=state.vendors;
+      if(typeof state.nextId==='number'&&state.nextId>0)nextId=state.nextId;
+      if(typeof state.nextTrId==='number'&&state.nextTrId>0)nextTrId=state.nextTrId;
       console.log('✓ Loaded from Supabase:',shipments.length,'shipments,',transfers.length,'transfers');
       return true;
     }
     console.log('Supabase empty — will try localStorage or SEED');
     return false;
   }catch(e){
-    console.error('Supabase load failed:',e);
+    console.error('Supabase load failed:',JSON.stringify(e));
     _supabaseOk=false;
     return false;
   }

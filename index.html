@@ -4650,8 +4650,8 @@ function applyAiFields(){
   if(ext.vendor){const match=vendors.find(v=>v.name.toLowerCase()===ext.vendor.toLowerCase());if(match){g('vendor-select').value=match.name;onVendorChange(match.name);}}
   if(ext.po_number)g('po-num').value=ext.po_number;
   if(ext.pickup_address)g('pu-address').value=ext.pickup_address;
-  if(ext.pickup_date)dpSet('dp-pu-date',_parseToInputDate(ext.pickup_date);
-  if(ext.delivery_date)dpSet('dp-del-date',_parseToInputDate(ext.delivery_date);
+  if(ext.pickup_date)dpSet('dp-pu-date',_parseToInputDate(ext.pickup_date));
+  if(ext.delivery_date)dpSet('dp-del-date',_parseToInputDate(ext.delivery_date));
   if(ext.shipment_type){const st=g('ship-type');const opt=[...st.options].find(o=>o.value===ext.shipment_type);if(opt)st.value=ext.shipment_type;}
   if(ext.temperature){const tr=g('temp-req');const opt=[...tr.options].find(o=>o.value===ext.temperature||o.text===ext.temperature);if(opt)tr.value=opt.value;}
   if(ext.pallets)g('pallets').value=ext.pallets;

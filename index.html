@@ -2800,7 +2800,6 @@ function saveQuotes(){
   updateHeaderStats();
   updateNavBadges();
   renderCompareCards();
-  autoBackup('saveQuotes');
   showToast('Quotes & carrier saved · Backup downloaded','success');
 }
 
@@ -3046,7 +3045,6 @@ function saveTransferQuotes(){
   updateNavBadges();
   if(typeof renderTransfers==='function')renderTransfers();
   renderTransferCompareCards();
-  autoBackup('saveTransferQuotes');
   showToast('Transfer quotes & carrier saved · Backup downloaded','success');
 }
 
@@ -3161,7 +3159,6 @@ function saveEditShipment(){
   renderHistory();
   updateHeaderStats();
   updateNavBadges();
-  autoBackup('saveEditShipment');
   showToast('Shipment updated · Backup downloaded','success');
 }
 
@@ -3175,7 +3172,6 @@ function deleteShipment(id){
     updateHeaderStats();
     updateNavBadges();
     populateCompareSel();
-    autoBackup('deleteShipment');
     showToast('Shipment deleted · Backup downloaded','warn');
   };
   openModal('modal-delete');
@@ -3238,7 +3234,6 @@ function deleteTransfer(id){
     closeModal('modal-delete');
     renderTransfers();
     updateNavBadges();
-    autoBackup('deleteTransfer');
     showToast('Transfer deleted · Backup downloaded','warn');
   };
   openModal('modal-delete');
@@ -3317,7 +3312,6 @@ function deleteVendorFromList(name){
     renderVendors();
     populateVendorSelect();
     updateNavBadges();
-    autoBackup('deleteVendor');
     showToast('Vendor removed · Backup downloaded','warn');
   };
   openModal('modal-delete');
@@ -3375,7 +3369,6 @@ function deleteVendorDetail(){
     renderVendors();
     populateVendorSelect();
     updateNavBadges();
-    autoBackup('deleteVendor');
     showToast('Vendor removed · Backup downloaded','warn');
   };
   openModal('modal-delete');
@@ -3391,12 +3384,10 @@ function saveVendor(){
     // update shipments too
     shipments.forEach(s=>{if(s.vendor===editIdx)s.vendor=name;});
     document.getElementById('av-edit-idx').value='';
-    autoBackup('editVendor');
     showToast('Vendor updated · Backup downloaded','success');
   }else{
     if(vendors.find(v=>v.name.toLowerCase()===name.toLowerCase())){showToast('Vendor already exists','error');return;}
     vendors.push({name,addr:document.getElementById('av-addr').value.trim(),contact:document.getElementById('av-contact').value.trim()});
-    autoBackup('addVendor');
     showToast('Vendor added · Backup downloaded','success');
   }
   document.getElementById('av-modal-title').textContent='Add New Vendor';
@@ -4020,14 +4011,6 @@ function exportDataNumbered(seq) {
   }
 }
 
-// Auto-backup: called after every data mutation (saveQuotes, edit, delete, etc.)
-// Saves to localStorage then downloads a numbered JSON backup silently.
-function autoBackup(label) {
-  saveToStorage();
-  const seq = getNextDownloadNumber();
-  exportDataNumbered(seq);
-  console.log(`[AutoBackup] ${label} → Backup-${seq}.json`);
-}
 
 // Master "Save & Download" — runs in order:
 //   1. Validate & save the shipment (same as saveShipment)

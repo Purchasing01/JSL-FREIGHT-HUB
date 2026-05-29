@@ -3159,7 +3159,8 @@ function saveEditShipment(){
   renderHistory();
   updateHeaderStats();
   updateNavBadges();
-  showToast('Shipment updated · Backup downloaded','success');
+  saveToStorage();
+  showToast('Shipment updated','success');
 }
 
 function deleteShipment(id){
@@ -3172,7 +3173,8 @@ function deleteShipment(id){
     updateHeaderStats();
     updateNavBadges();
     populateCompareSel();
-    showToast('Shipment deleted · Backup downloaded','warn');
+    saveToStorage();
+    showToast('Shipment deleted','warn');
   };
   openModal('modal-delete');
 }
@@ -3234,7 +3236,8 @@ function deleteTransfer(id){
     closeModal('modal-delete');
     renderTransfers();
     updateNavBadges();
-    showToast('Transfer deleted · Backup downloaded','warn');
+    saveToStorage();
+    showToast('Transfer deleted','warn');
   };
   openModal('modal-delete');
 }
@@ -3680,17 +3683,33 @@ function saveToStorage(){
   try{
     localStorage.setItem(STORAGE_KEY,JSON.stringify(buildSnapshot()));
   }catch(e){console.error('localStorage save failed:',e);}
-  // 2. Save to Supabase (cloud) — async, don't block UI
+  // 2. Save to Supabase via queue (prevents race conditions)
   if(_supabaseOk){
-    _saveToSupabase().then(()=>{
-      flashSaveStatus('saved');
-    }).catch(e=>{
-      console.error('Supabase save error:',e);
-      flashSaveStatus('saved'); // still saved locally
-    });
+    _queueSupabaseSave();
   }else{
     flashSaveStatus('saved');
   }
+}
+
+// Save queue — ensures only one save runs at a time, and always saves
+// the CURRENT state. Prevents stale writes overwriting newer data.
+let _saveInProgress=false;
+let _savePending=false;
+function _queueSupabaseSave(){
+  if(_saveInProgress){_savePending=true;return;}
+  _saveInProgress=true;
+  _saveToSupabase().then(()=>{
+    flashSaveStatus('saved');
+  }).catch(e=>{
+    console.error('Supabase save error:',e);
+    flashSaveStatus('error');
+  }).finally(()=>{
+    _saveInProgress=false;
+    if(_savePending){
+      _savePending=false;
+      _queueSupabaseSave(); // run again with latest state
+    }
+  });
 }
 
 async function _saveToSupabase(){
@@ -3879,7 +3898,10 @@ function triggerImport(){
 // Wrap key mutation functions so they auto-save after running.
 // Done at the end of the script so all the originals are defined.
 function _wrapAutoSave(){
-  const fns=['saveShipment','saveTransfer','saveQuotes','saveTransferQuotes','saveEdit','deleteShipment','deleteTransfer','addVendor','editVendor','deleteVendor'];
+  // Note: deleteShipment & deleteTransfer are NOT wrapped — they use modal
+  // callbacks and call saveToStorage() themselves after the deletion completes.
+  // Wrapping them would save the pre-delete state and cause a race condition.
+  const fns=['saveShipment','saveTransfer','saveQuotes','saveTransferQuotes','saveEdit','addVendor','editVendor','deleteVendor'];
   fns.forEach(name=>{
     const orig=window[name];
     if(typeof orig==='function'){

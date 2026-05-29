@@ -4446,8 +4446,42 @@ function _updateApiKeyStatus(){
   else{el.textContent='Not configured — Paste & Auto-fill is disabled';el.style.color='#94a3b8';}
 }
 
-const _origOpenDataMenu2=window.openDataMenu;
-window.openDataMenu=function(){if(typeof _origOpenDataMenu2==='function')_origOpenDataMenu2();_updateApiKeyStatus();};
+function openDataMenu(){
+  const m=document.getElementById('data-modal');
+  if(m)m.classList.add('open');
+  _updateApiKeyStatus();
+}
+function closeDataMenu(){
+  const m=document.getElementById('data-modal');
+  if(m)m.classList.remove('open');
+}
+
+// Visual indicator in the Data menu showing save state
+function flashSaveStatus(state){
+  const el=document.getElementById('save-status');
+  if(!el)return;
+  if(state==='saved'){
+    el.textContent='✓ All changes saved (cloud + local)';
+    el.style.color='#15803d';
+  }else if(state==='error'){
+    el.textContent='⚠ Cloud save failed — saved locally';
+    el.style.color='#dc2626';
+  }else if(state==='saving'){
+    el.textContent='… Syncing to cloud';
+    el.style.color='#94a3b8';
+  }else{
+    el.textContent='Auto-save on (Supabase + localStorage)';
+    el.style.color='#94a3b8';
+  }
+}
+
+// Close data modal on Escape
+document.addEventListener('keydown',(e)=>{
+  if(e.key==='Escape'){
+    const m=document.getElementById('data-modal');
+    if(m&&m.classList.contains('open'))closeDataMenu();
+  }
+});
 
 function openAiPasteZone(){
   if(!loadApiKey()){openDataMenu();setTimeout(()=>{showToast('Add your API key in the Data menu','warn');document.getElementById('ai-api-key-input')?.focus();},300);return;}

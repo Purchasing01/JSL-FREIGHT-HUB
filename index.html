@@ -2149,6 +2149,15 @@ window.onload = async () => {
     // Sync localStorage cache
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(buildSnapshot())); } catch(e) {}
   }
+  // Trigger daily backup (silently — only saves if no backup exists for today)
+  if(_supabaseOk){
+    fetch('https://eaexvxwynzgondwycfap.supabase.co/functions/v1/daily-backup',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:'{}'
+    }).then(r=>r.json()).then(d=>console.log('[Backup]',d.message||d)).catch(e=>console.warn('[Backup] skipped:',e));
+  }
+
   // Wrap mutation functions to auto-save after each change
   _wrapAutoSave();
   populateVendorSelect();

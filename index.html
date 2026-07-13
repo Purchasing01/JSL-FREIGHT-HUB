@@ -5186,15 +5186,18 @@ async function captureElementAsJpeg(el, filename, statusMsg) {
   await new Promise(r => setTimeout(r, 150));
 
   try {
+    // IMPORTANT: windowWidth re-lays-out the page at that viewport width, so the
+    // canvas width MUST match it — otherwise the content renders narrower than
+    // the canvas and leaves a big white gap on the right side of the JPEG.
+    const CAPTURE_W = 1280;
     const canvas = await html2canvas(el, {
       scale: 2.5,                  // High DPI — crisp on Retina & print
       backgroundColor: '#ffffff',  // JPEG requires solid bg
       useCORS: true,
       logging: false,
-      // Use element's actual rendered dimensions, not viewport
-      width: el.scrollWidth,
-      height: el.scrollHeight,
-      windowWidth: 1280,           // Pin viewport width so layout is consistent
+      windowWidth: CAPTURE_W,      // Pin viewport width so layout is consistent
+      width: CAPTURE_W,            // Canvas width matches the relayout width
+      // height auto-derived from content at that width
       // Allow images embedded via data URLs (the JSL logo)
       allowTaint: false,
       // Avoid issues with sticky/fixed elements outside the capture target
@@ -7919,3 +7922,5 @@ CRITICAL OUTPUT RULES — answers must be clean, scannable and ACTION-READY:
 
 
 </html>
+
+

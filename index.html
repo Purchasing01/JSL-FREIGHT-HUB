@@ -3229,6 +3229,13 @@ function populateCompareSel(){
     if(changed)loadCompare();
   }else if(cur){
     sel.value=cur;
+    if(sel.value!==String(cur)){
+      // The previously selected shipment fell out of the filtered list — the
+      // <select> silently reset itself to blank. Re-sync the panel instead of
+      // leaving stale content (e.g. attachment card) showing for a shipment
+      // that's no longer actually selected.
+      loadCompare();
+    }
   }
 
   // Show count
@@ -4829,13 +4836,31 @@ async function _psDeleteFromStorage(imageUrl) {
 let _supabaseOk=!!_sb;
 
 // ── Supabase Storage — approved freight attachments (invoices/POD/paperwork) ──
-// Reuses the packing-slips bucket with a distinct filename prefix so no new
-// bucket/policy configuration is required.
+// Reuses the packing-slips bucket. IMPORTANT: the bucket's storage policy only
+// permits object names starting with "transfer-" (the pattern packing slip
+// uploads already use), so this must use the same prefix or every upload gets
+// silently rejected by RLS regardless of file type.
+let _saLastUploadError = null;
+
+// Convert base64 to a blob: URL — used to VIEW/OPEN attachments that only have
+// a local base64 fallback (no cloud URL). Chrome blocks direct top-level
+// navigation to data: URLs as a phishing safeguard, which shows as a blank
+// page when opening a PDF/file in a new tab; blob: URLs aren't restricted.
+function _b64ToBlobUrl(base64, mime){
+  try{
+    const byteChars=atob(base64);
+    const byteNums=new Uint8Array(byteChars.length);
+    for(let i=0;i<byteChars.length;i++)byteNums[i]=byteChars.charCodeAt(i);
+    const blob=new Blob([byteNums],{type:mime||'application/octet-stream'});
+    return URL.createObjectURL(blob);
+  }catch(e){ console.error('[Shipment Attachment] blob conversion failed:',e); return ''; }
+}
 async function _saUploadToStorage(fileB64, fileMime, shipmentId, fileName) {
+  _saLastUploadError = null;
   try {
     const guessExt = fileMime.includes('pdf') ? 'pdf' : fileMime.includes('png') ? 'png' : fileMime.includes('webp') ? 'webp' : 'jpg';
     const ext = (fileName && fileName.includes('.')) ? fileName.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g,'') || guessExt : guessExt;
-    const path = `shipment-attach-${shipmentId}-${Date.now()}.${ext}`;
+    const path = `transfer-shipatt-${shipmentId}-${Date.now()}.${ext}`;
     const byteChars = atob(fileB64);
     const byteNums = new Uint8Array(byteChars.length);
     for (let i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i);
@@ -4854,7 +4879,11 @@ async function _saUploadToStorage(fileB64, fileMime, shipmentId, fileName) {
       if (!res.ok) throw new Error(await res.text());
       return `${SUPABASE_URL}/storage/v1/object/public/${PS_BUCKET}/${path}`;
     }
-  } catch(e) { console.error('[Shipment Attachment] upload failed:', e); return null; }
+  } catch(e) {
+    _saLastUploadError = e?.message || e?.error_description || String(e);
+    console.error('[Shipment Attachment] upload failed:', e);
+    return null;
+  }
 }
 
 async function _saDeleteFromStorage(fileUrl) {
@@ -4898,7 +4927,8 @@ async function onShipmentAttachmentSelected(evt){
   } else {
     // Fallback: keep base64 so it's still usable this session even if cloud upload failed
     s.attachment={name:file.name,mimeType:file.type||'application/octet-stream',base64:b64,uploadedAt:new Date().toISOString()};
-    showToast('⚠️ Cloud upload failed — attachment saved locally for this session only','warn');
+    const reason=_saLastUploadError?(' — '+_saLastUploadError):'';
+    showToast('⚠️ Cloud storage upload failed'+reason+'. Saved with the shipment record instead.','warn');
   }
   saveToStorage();
   renderShipmentAttachment(s);
@@ -4913,18 +4943,23 @@ function renderShipmentAttachment(s){
     return;
   }
   const a=s.attachment;
-  const src=a.url||(a.base64?`data:${a.mimeType};base64,${a.base64}`:'');
+  // Thumbnail <img> src can safely use a data: URI (not a top-level navigation).
+  const imgSrc=a.url||(a.base64?`data:${a.mimeType};base64,${a.base64}`:'');
+  // BUT opening/viewing in a new tab needs a blob: URL — Chrome blocks direct
+  // top-level navigation to data: URLs (security measure against phishing),
+  // which is exactly what showed as a blank page when opening a PDF attachment.
+  const openSrc=a.url||(a.base64?_b64ToBlobUrl(a.base64,a.mimeType):'');
   const isImg=(a.mimeType||'').startsWith('image/');
   wrap.innerHTML=`
     <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;">
       ${isImg
-        ? `<img src="${src}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid #d1d5db;cursor:pointer;" onclick="window.open('${src}','_blank')" title="Click to view">`
+        ? `<img src="${imgSrc}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid #d1d5db;cursor:pointer;" onclick="window.open('${openSrc}','_blank')" title="Click to view">`
         : `<div style="width:44px;height:44px;background:#e2e8f0;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">📄</div>`}
       <div style="flex:1;min-width:0;">
         <div style="font-size:12.5px;font-weight:700;color:#15803d;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${a.name||'Attachment'}</div>
         <div style="font-size:11px;color:#64748b;">Uploaded ${fmtDate((a.uploadedAt||'').slice(0,10))}</div>
       </div>
-      <a href="${src}" target="_blank" rel="noopener" class="btn btn-outline btn-sm btn-icon" title="View / Download">
+      <a href="${openSrc}" target="_blank" rel="noopener" class="btn btn-outline btn-sm btn-icon" title="View / Download">
         <svg class="icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       </a>
       <button class="btn btn-sm btn-icon" style="background:#fee2e2;color:#dc2626;border:none;" onclick="removeShipmentAttachment()" title="Remove attachment">
@@ -4936,7 +4971,11 @@ function renderShipmentAttachment(s){
 function removeShipmentAttachment(){
   const id=parseInt(document.getElementById('compare-selector').value);
   const s=shipments.find(x=>x.id===id);
-  if(!s||!s.attachment)return;
+  if(!s){
+    showToast('No shipment selected — pick it again from the dropdown and retry','error');
+    return;
+  }
+  if(!s.attachment)return;
   if(!confirm('Remove this attachment?'))return;
   if(s.attachment.url) _saDeleteFromStorage(s.attachment.url);
   delete s.attachment;

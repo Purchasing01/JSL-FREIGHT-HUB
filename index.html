@@ -1546,7 +1546,11 @@ svg.icon-sm { width: 13px; height: 13px; fill: none; stroke: currentColor; strok
       </button>
     </div>
     <div class="card-body" style="padding:12px 18px;">
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;align-items:end;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:12px;align-items:end;">
+        <div class="field">
+          <label>PO #</label>
+          <input type="text" id="cf-po" placeholder="Search PO number…" oninput="populateCompareSel()" style="border:1.5px solid #e2e8f0;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;width:100%;outline:none;">
+        </div>
         <div class="field">
           <label>Vendor</label>
           <select id="cf-vendor" onchange="populateCompareSel()">
@@ -1611,6 +1615,21 @@ svg.icon-sm { width: 13px; height: 13px; fill: none; stroke: currentColor; strok
           </select>
         </div>
         <div id="compare-note" style="font-size:12px;color:#94a3b8;margin-top:8px;">Enter at least 2 quotes to see the comparison and savings calculation.</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-hd">
+        <span class="card-title">Approved Freight Attachment</span>
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer;margin:0;">
+          <svg class="icon-sm" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+          Attach File
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" style="display:none;" onchange="onShipmentAttachmentSelected(event)">
+        </label>
+      </div>
+      <div class="card-body">
+        <div id="sa-attachment-wrap"></div>
+        <div style="font-size:11px;color:#94a3b8;margin-top:8px;line-height:1.5;">Attach the invoice, proof of delivery, or paperwork for this shipment — especially useful when the approved freight went with the <b>Vendor</b> instead of a carrier.</div>
       </div>
     </div>
 
@@ -2978,7 +2997,7 @@ function saveShipment(){
   updateNavBadges();
   renderHistory(); // keep History table current after every new save
   // Clear any active filters so the new shipment is always visible in Compare Rates
-  ['cf-vendor','cf-carrier','cf-pu-from','cf-pu-to'].forEach(id=>{
+  ['cf-po','cf-vendor','cf-carrier','cf-pu-from','cf-pu-to'].forEach(id=>{
     const el=document.getElementById(id);if(el)el.value='';
   });
   populateCompareSel();
@@ -3158,11 +3177,12 @@ function populateCompareSel(){
   }
 
   // Read active filter values
+  const fPo=(document.getElementById('cf-po')?.value||'').trim().toLowerCase();
   const fVendor=(cfVendor?.value||'').toLowerCase();
   const fCarrier=(cfCarrier?.value||'').toLowerCase();
   const fPuFrom=document.getElementById('cf-pu-from')?.value||'';
   const fPuTo=document.getElementById('cf-pu-to')?.value||'';
-  const anyFilter=!!(fVendor||fCarrier||fPuFrom||fPuTo);
+  const anyFilter=!!(fPo||fVendor||fCarrier||fPuFrom||fPuTo);
 
   // Show/hide clear button
   const clearBtn=document.getElementById('compare-filter-clear');
@@ -3171,6 +3191,7 @@ function populateCompareSel(){
   // Filter + sort by pickup date ascending (earliest first for clarity)
   let list=[...shipments]
     .filter(s=>{
+      if(fPo&&!String(s.po||'').toLowerCase().includes(fPo))return false;
       if(fVendor&&!(s.vendor||'').toLowerCase().includes(fVendor))return false;
       if(fCarrier&&!(s.approved||'').toLowerCase().includes(fCarrier))return false;
       const puDate=s.puDate||s.date||'';
@@ -3195,7 +3216,20 @@ function populateCompareSel(){
     o.textContent=`PO ${po} · ${supplier} · PU: ${puDate} · ${warehouse}`;
     sel.appendChild(o);
   });
-  if(cur)sel.value=cur;
+
+  // Typing a PO auto-loads the match — an exact PO hit always wins, otherwise
+  // a single remaining match auto-loads too. No need to open the dropdown.
+  let autoTarget=null;
+  if(fPo){
+    autoTarget=list.find(s=>String(s.po||'').toLowerCase()===fPo)||(list.length===1?list[0]:null);
+  }
+  if(autoTarget){
+    const changed=String(sel.value)!==String(autoTarget.id);
+    sel.value=autoTarget.id;
+    if(changed)loadCompare();
+  }else if(cur){
+    sel.value=cur;
+  }
 
   // Show count
   const countEl=document.getElementById('compare-sel-count');
@@ -3203,7 +3237,7 @@ function populateCompareSel(){
 }
 
 function clearCompareFilters(){
-  ['cf-vendor','cf-carrier','cf-pu-from','cf-pu-to'].forEach(id=>{
+  ['cf-po','cf-vendor','cf-carrier','cf-pu-from','cf-pu-to'].forEach(id=>{
     const el=document.getElementById(id);if(el)el.value='';
   });
   populateCompareSel();
@@ -3252,6 +3286,7 @@ function loadCompare(){
   appSel.onchange=renderCompareCards;
 
   renderCompareCards();
+  renderShipmentAttachment(s);
 }
 
 function renderCompareInputs(s){
@@ -4793,6 +4828,123 @@ async function _psDeleteFromStorage(imageUrl) {
 }
 let _supabaseOk=!!_sb;
 
+// ── Supabase Storage — approved freight attachments (invoices/POD/paperwork) ──
+// Reuses the packing-slips bucket with a distinct filename prefix so no new
+// bucket/policy configuration is required.
+async function _saUploadToStorage(fileB64, fileMime, shipmentId, fileName) {
+  try {
+    const guessExt = fileMime.includes('pdf') ? 'pdf' : fileMime.includes('png') ? 'png' : fileMime.includes('webp') ? 'webp' : 'jpg';
+    const ext = (fileName && fileName.includes('.')) ? fileName.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g,'') || guessExt : guessExt;
+    const path = `shipment-attach-${shipmentId}-${Date.now()}.${ext}`;
+    const byteChars = atob(fileB64);
+    const byteNums = new Uint8Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i);
+    const blob = new Blob([byteNums], { type: fileMime });
+    if (_sb) {
+      const { error } = await _sb.storage.from(PS_BUCKET).upload(path, blob, { contentType: fileMime, upsert: true });
+      if (error) throw error;
+      const { data } = _sb.storage.from(PS_BUCKET).getPublicUrl(path);
+      return data?.publicUrl || null;
+    } else {
+      const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${PS_BUCKET}/${path}`, {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Content-Type': fileMime },
+        body: blob
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return `${SUPABASE_URL}/storage/v1/object/public/${PS_BUCKET}/${path}`;
+    }
+  } catch(e) { console.error('[Shipment Attachment] upload failed:', e); return null; }
+}
+
+async function _saDeleteFromStorage(fileUrl) {
+  if (!fileUrl) return;
+  try {
+    const marker = `/object/public/${PS_BUCKET}/`;
+    const idx = fileUrl.indexOf(marker);
+    if (idx < 0) return;
+    const path = fileUrl.slice(idx + marker.length);
+    if (_sb) {
+      await _sb.storage.from(PS_BUCKET).remove([path]);
+    } else {
+      await fetch(`${SUPABASE_URL}/storage/v1/object/${PS_BUCKET}/${path}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': 'Bearer ' + SUPABASE_ANON }
+      });
+    }
+  } catch(e) { console.warn('[Shipment Attachment] delete failed:', e); }
+}
+
+// Handle file selection from the "Attach File" input in Compare Rates
+async function onShipmentAttachmentSelected(evt){
+  const id=parseInt(document.getElementById('compare-selector').value);
+  const s=shipments.find(x=>x.id===id);
+  const file=evt.target.files[0];
+  if(!s){showToast('Select a shipment first','error');evt.target.value='';return;}
+  if(!file)return;
+  const maxSize=10*1024*1024; // 10MB
+  if(file.size>maxSize){showToast('File too large — max 10MB','error');evt.target.value='';return;}
+  let b64;
+  try{ b64=await _fileToBase64(file); }
+  catch(e){ showToast('Could not read file','error'); evt.target.value=''; return; }
+  showToast('Uploading attachment…','info');
+  let url=null;
+  if(_supabaseOk) url=await _saUploadToStorage(b64,file.type||'application/octet-stream',s.id,file.name);
+  const prevAttachment=s.attachment;
+  if(url){
+    s.attachment={name:file.name,mimeType:file.type||'application/octet-stream',url,uploadedAt:new Date().toISOString()};
+    if(prevAttachment&&prevAttachment.url&&prevAttachment.url!==url) _saDeleteFromStorage(prevAttachment.url);
+    showToast('Attachment saved ✓','success');
+  } else {
+    // Fallback: keep base64 so it's still usable this session even if cloud upload failed
+    s.attachment={name:file.name,mimeType:file.type||'application/octet-stream',base64:b64,uploadedAt:new Date().toISOString()};
+    showToast('⚠️ Cloud upload failed — attachment saved locally for this session only','warn');
+  }
+  saveToStorage();
+  renderShipmentAttachment(s);
+  evt.target.value='';
+}
+
+function renderShipmentAttachment(s){
+  const wrap=document.getElementById('sa-attachment-wrap');
+  if(!wrap)return;
+  if(!s||!s.attachment){
+    wrap.innerHTML=`<div style="font-size:12px;color:#94a3b8;font-style:italic;">No attachment yet — upload an invoice, POD, or paperwork for this approved freight.</div>`;
+    return;
+  }
+  const a=s.attachment;
+  const src=a.url||(a.base64?`data:${a.mimeType};base64,${a.base64}`:'');
+  const isImg=(a.mimeType||'').startsWith('image/');
+  wrap.innerHTML=`
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;">
+      ${isImg
+        ? `<img src="${src}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid #d1d5db;cursor:pointer;" onclick="window.open('${src}','_blank')" title="Click to view">`
+        : `<div style="width:44px;height:44px;background:#e2e8f0;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">📄</div>`}
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:12.5px;font-weight:700;color:#15803d;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${a.name||'Attachment'}</div>
+        <div style="font-size:11px;color:#64748b;">Uploaded ${fmtDate((a.uploadedAt||'').slice(0,10))}</div>
+      </div>
+      <a href="${src}" target="_blank" rel="noopener" class="btn btn-outline btn-sm btn-icon" title="View / Download">
+        <svg class="icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </a>
+      <button class="btn btn-sm btn-icon" style="background:#fee2e2;color:#dc2626;border:none;" onclick="removeShipmentAttachment()" title="Remove attachment">
+        <svg class="icon-sm" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+      </button>
+    </div>`;
+}
+
+function removeShipmentAttachment(){
+  const id=parseInt(document.getElementById('compare-selector').value);
+  const s=shipments.find(x=>x.id===id);
+  if(!s||!s.attachment)return;
+  if(!confirm('Remove this attachment?'))return;
+  if(s.attachment.url) _saDeleteFromStorage(s.attachment.url);
+  delete s.attachment;
+  saveToStorage();
+  renderShipmentAttachment(s);
+  showToast('Attachment removed','info');
+}
+
 function buildSnapshot(){
   // Strip packingSlip.image (base64) ONLY when imageUrl is already set (image is in Storage).
   // If there's no imageUrl yet (migration pending or upload failed), keep the base64 so
@@ -5186,18 +5338,21 @@ async function captureElementAsJpeg(el, filename, statusMsg) {
   await new Promise(r => setTimeout(r, 150));
 
   try {
-    // IMPORTANT: windowWidth re-lays-out the page at that viewport width, so the
-    // canvas width MUST match it — otherwise the content renders narrower than
-    // the canvas and leaves a big white gap on the right side of the JPEG.
-    const CAPTURE_W = 1280;
+    // ROOT CAUSE of the black/white margin bug: forcing `windowWidth` makes
+    // html2canvas re-lay the page out in a virtual window at that width, but
+    // this element sits inside a centered, padded container (.workspace has
+    // max-width:1280px + side padding), so its OWN rendered width inside that
+    // virtual window never actually equals the width we told the canvas to
+    // use — leaving an unpainted strip that flattens to black in the JPEG.
+    // FIX: don't force any width/windowWidth at all. Let html2canvas capture
+    // the element exactly as it's already rendered on the live page — the
+    // canvas then always matches the content 1:1. Resolution is controlled
+    // purely by `scale`, so image quality is unaffected.
     const canvas = await html2canvas(el, {
       scale: 2.5,                  // High DPI — crisp on Retina & print
       backgroundColor: '#ffffff',  // JPEG requires solid bg
       useCORS: true,
       logging: false,
-      windowWidth: CAPTURE_W,      // Pin viewport width so layout is consistent
-      width: CAPTURE_W,            // Canvas width matches the relayout width
-      // height auto-derived from content at that width
       // Allow images embedded via data URLs (the JSL logo)
       allowTaint: false,
       // Avoid issues with sticky/fixed elements outside the capture target
@@ -5297,7 +5452,7 @@ async function saveAndDownload() {
   updateHeaderStats();
   updateNavBadges();
   // Clear any active filters so the new shipment is always visible in Compare Rates
-  ['cf-vendor','cf-carrier','cf-pu-from','cf-pu-to'].forEach(id=>{
+  ['cf-po','cf-vendor','cf-carrier','cf-pu-from','cf-pu-to'].forEach(id=>{
     const el=document.getElementById(id);if(el)el.value='';
   });
   populateCompareSel();

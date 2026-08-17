@@ -1046,6 +1046,566 @@ svg.icon-sm { width: 13px; height: 13px; fill: none; stroke: currentColor; strok
 }
 
 </style>
+
+<style>
+/* ══════════════════════════════════════════════════════
+   DASHBOARD — live dispatch board
+   Additive only. Every selector is scoped to #panel-dashboard
+   or a .dsh- class, so nothing above can be affected.
+   Palette is taken from the existing app tokens.
+═══════════════════════════════════════════════════════ */
+body.dashboard-active { background: #fffaf7; }
+body.dashboard-active .nav-tab.active { color:#9b1c1c; border-bottom-color:#dc2626; }
+
+#panel-dashboard .dsh-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:20px; margin-bottom:16px; flex-wrap:wrap; }
+#panel-dashboard .dsh-top h1{ font-size:20px; font-weight:800; color:var(--navy); letter-spacing:-.02em; margin-bottom:4px; }
+#panel-dashboard .dsh-top p{ font-size:12.5px; color:#6b7280; max-width:660px; line-height:1.55; }
+
+/* ── filter bar ─────────────────────────────────────── */
+#panel-dashboard .dsh-filters{ background:#fff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:0 1px 4px rgba(0,0,0,.05);
+  padding:12px 16px; margin-bottom:16px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+#panel-dashboard .dsh-fgroup{ display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
+#panel-dashboard .dsh-flabel{ font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.11em; color:#a8a29e; margin-right:2px; }
+#panel-dashboard .dsh-chip{ font-size:11.5px; font-weight:600; padding:5px 11px; border-radius:999px; cursor:pointer;
+  border:1.5px solid #e7e5e4; background:#fff; color:#57534e; transition:all .15s; white-space:nowrap; user-select:none; line-height:1.3; }
+#panel-dashboard .dsh-chip:hover{ border-color:#d6d3d1; background:#fafaf9; }
+#panel-dashboard .dsh-chip.on{ background:#9b1c1c; border-color:#9b1c1c; color:#fff; }
+#panel-dashboard .dsh-chip.carrier.on{ color:#fff; }
+#panel-dashboard .dsh-fsep{ width:1px; height:24px; background:#eeecea; }
+#panel-dashboard .dsh-reset{ margin-left:auto; font-size:11.5px; font-weight:600; color:#9b1c1c; cursor:pointer;
+  background:none; border:none; padding:5px 9px; border-radius:6px; }
+#panel-dashboard .dsh-reset:hover{ background:#fef2f2; }
+#panel-dashboard .dsh-reset[disabled]{ color:#d6d3d1; cursor:default; background:none; }
+
+/* ── KPI strip ──────────────────────────────────────── */
+#panel-dashboard .dsh-kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px; }
+#panel-dashboard .dsh-kpi{ background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:14px 16px; position:relative; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,.05); }
+#panel-dashboard .dsh-kpi::before{ content:''; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(90deg,#dc2626,#9b1c1c); }
+#panel-dashboard .dsh-kpi.g::before{ background:linear-gradient(90deg,#16a34a,#15803d); }
+#panel-dashboard .dsh-kpi.a::before{ background:linear-gradient(90deg,#f59e0b,#d97706); }
+#panel-dashboard .dsh-kpi.b::before{ background:linear-gradient(90deg,#3b82f6,#1d4ed8); }
+#panel-dashboard .dsh-kpi .kl{ font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:#a8a29e; margin-bottom:7px; }
+#panel-dashboard .dsh-kpi .kv{ font-family:'Aptos','Inter',sans-serif; font-size:23px; font-weight:800; color:var(--navy); line-height:1; }
+#panel-dashboard .dsh-kpi.g .kv{ color:#15803d; } #panel-dashboard .dsh-kpi.a .kv{ color:#d97706; } #panel-dashboard .dsh-kpi.b .kv{ color:#1d4ed8; }
+#panel-dashboard .dsh-kpi .ks{ font-size:10.5px; color:#a8a29e; margin-top:4px; }
+
+/* ── dispatch board ─────────────────────────────────── */
+#panel-dashboard .dsh-board{ background:#fff; border:1px solid #e5e7eb; border-radius:14px; box-shadow:0 1px 4px rgba(0,0,0,.06); overflow:hidden; margin-bottom:16px; }
+#panel-dashboard .dsh-bhd{ display:flex; align-items:center; justify-content:space-between; padding:13px 18px; border-bottom:1px solid #f5f5f4; gap:14px; flex-wrap:wrap; }
+#panel-dashboard .dsh-bhd .bt{ font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:#a8a29e; }
+#panel-dashboard .dsh-bhd .bv{ font-family:'Aptos','Inter',sans-serif; font-size:19px; font-weight:800; color:var(--navy); margin-top:2px; }
+#panel-dashboard .dsh-ctrls{ display:flex; align-items:center; gap:8px; }
+#panel-dashboard .dsh-ctrl{ width:30px; height:30px; border-radius:8px; border:1.5px solid #e7e5e4; background:#fff; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; color:#57534e; transition:all .15s; padding:0; }
+#panel-dashboard .dsh-ctrl:hover{ border-color:#9b1c1c; color:#9b1c1c; }
+#panel-dashboard .dsh-ctrl.on{ background:#9b1c1c; border-color:#9b1c1c; color:#fff; }
+#panel-dashboard .dsh-ctrl svg{ width:14px; height:14px; }
+#panel-dashboard .dsh-speed{ font-size:11px; font-weight:700; color:#57534e; border:1.5px solid #e7e5e4; border-radius:8px;
+  height:30px; padding:0 10px; background:#fff; cursor:pointer; }
+#panel-dashboard .dsh-speed:hover{ border-color:#9b1c1c; color:#9b1c1c; }
+
+/* lane tooltip (hover card) */
+#panel-dashboard .dsh-tip{ display:none; position:absolute; z-index:5; pointer-events:none; max-width:260px;
+  background:#1c1917; color:#fafaf9; border-radius:10px; padding:9px 12px; font-size:11px; line-height:1.5;
+  box-shadow:0 8px 24px rgba(0,0,0,.28); }
+#panel-dashboard .dsh-tip b{ font-size:11.5px; }
+#panel-dashboard .dsh-tip .tl{ color:#d6d3d1; font-size:10.5px; margin:2px 0 3px; }
+
+/* view toggle: all shipments vs in-transit only */
+#panel-dashboard .dsh-seg{ display:flex; background:#f5f5f4; border:1px solid #e7e5e4; border-radius:10px; padding:3px; gap:2px; }
+#panel-dashboard .dsh-seg button{ border:none; background:transparent; font-family:inherit; font-size:11.5px; font-weight:700;
+  color:#78716c; padding:5px 13px; border-radius:8px; cursor:pointer; transition:background .15s var(--ease), color .15s var(--ease); }
+#panel-dashboard .dsh-seg button:hover{ color:#9b1c1c; }
+#panel-dashboard .dsh-seg button.on{ background:#9b1c1c; color:#fff; box-shadow:0 1px 3px rgba(155,28,28,.3); }
+#panel-dashboard .dsh-seg button.on:hover{ color:#fff; }
+
+/* transfer lanes are dashed so they never read as inbound freight */
+#panel-dashboard .dsh-lane.tr{ stroke-dasharray:6 4; }
+
+/* metro anchor pin (true location of a fanned-out plant cluster) */
+#panel-dashboard .dsh-anchor .acore{ fill:#9b1c1c; opacity:.55; }
+#panel-dashboard .dsh-anchor .aring{ fill:none; stroke:#9b1c1c; stroke-width:1; opacity:.28; stroke-dasharray:2 2; }
+
+/* plants that only appear as transfer endpoints / empty plants */
+#panel-dashboard .dsh-cluster.xfer .core{ fill:#b45309; }
+#panel-dashboard .dsh-cluster.xfer .ring{ stroke:#b45309; }
+#panel-dashboard .dsh-cluster.xfer .halo{ fill:#b45309; }
+#panel-dashboard .dsh-cluster.idle .core{ fill:#c7bdb9; }
+#panel-dashboard .dsh-cluster.idle .ring{ stroke:#c7bdb9; }
+#panel-dashboard .dsh-cluster.idle .halo{ fill:#c7bdb9; }
+
+/* ── MAP STAGE ─────────────────────────────────────────── */
+#panel-dashboard .dsh-stage{ position:relative; display:grid; grid-template-columns:1fr 274px; gap:0;
+  background:
+    radial-gradient(900px 420px at 30% 0%, #fffefd 0%, rgba(255,254,253,0) 62%),
+    linear-gradient(180deg,#fffdfc 0%,#fdf8f6 100%); }
+#panel-dashboard .dsh-mapwrap{ position:relative; overflow:hidden; }
+#panel-dashboard .dsh-stage svg#dsh-svg{ display:block; width:100%; height:auto; }
+
+/* states */
+#panel-dashboard .dsh-st{ fill:#fdf9f8; stroke:#f0e7e5; stroke-width:.8; stroke-linejoin:round;
+  transition:fill .25s var(--ease), stroke .25s var(--ease); cursor:pointer; }
+#panel-dashboard .dsh-st.has{ fill:#fdf1ef; stroke:#eddcd9; }
+#panel-dashboard .dsh-st.has:hover{ fill:#fbe3df; }
+#panel-dashboard .dsh-st.on{ fill:#f7d3cd; stroke:#c98b83; stroke-width:1.2; }
+#panel-dashboard .dsh-st.dim{ fill:#fdfbfa; stroke:#f4eeec; }
+
+/* lanes */
+/* NOTE: these are the map lanes. They must NOT be called .dsh-arc — that
+   class already belongs to the carrier-mix donut segments, whose
+   `stroke-width:19` hover rule would otherwise fire on the map. */
+#panel-dashboard .dsh-lane{ fill:none; stroke-linecap:round; cursor:pointer;
+  transition:opacity .25s var(--ease), stroke-width .2s var(--ease); }
+#panel-dashboard .dsh-lane.faded{ opacity:.1 !important; }
+#panel-dashboard .dsh-lane.hot{ stroke-width:3 !important; opacity:.95 !important; }
+#panel-dashboard .dsh-lanehit{ fill:none; stroke:transparent; stroke-width:14; cursor:pointer; }
+
+/* nodes */
+#panel-dashboard .dsh-org{ cursor:pointer; transition:opacity .25s var(--ease); }
+#panel-dashboard .dsh-org circle.core{ transition:r .2s var(--ease); }
+#panel-dashboard .dsh-org:hover circle.core{ r:4.6; }
+#panel-dashboard .dsh-org.faded{ opacity:.14; }
+#panel-dashboard .dsh-cluster .halo{ fill:#9b1c1c; opacity:.10; }
+#panel-dashboard .dsh-cluster .ring{ fill:none; stroke:#9b1c1c; stroke-width:1.1; opacity:.42; }
+#panel-dashboard .dsh-cluster .core{ fill:#9b1c1c; stroke:#fff; stroke-width:1.6; }
+#panel-dashboard .dsh-cluster.on .halo{ opacity:.2; }
+#panel-dashboard .dsh-cluster.on .core{ fill:#dc2626; }
+#panel-dashboard .dsh-plant{ cursor:pointer; }
+#panel-dashboard .dsh-plant .lead{ fill:none; stroke:#d8c4c0; stroke-width:1; transition:stroke .2s var(--ease); }
+#panel-dashboard .dsh-plant .dot{ fill:#c98b83; transition:fill .2s var(--ease); }
+#panel-dashboard .dsh-plant:hover .lead, #panel-dashboard .dsh-plant.on .lead{ stroke:#9b1c1c; }
+#panel-dashboard .dsh-plant:hover .dot,  #panel-dashboard .dsh-plant.on .dot{ fill:#9b1c1c; }
+#panel-dashboard .dsh-plant.on text.pn{ fill:#9b1c1c; }
+#panel-dashboard .dsh-plant .chip{ fill:#fffdfc; fill-opacity:.94; stroke:#f0e4e2; stroke-width:1;
+  transition:stroke .2s var(--ease), fill-opacity .2s var(--ease); }
+#panel-dashboard .dsh-plant:hover .chip{ stroke:#dcbcb8; fill-opacity:1; }
+#panel-dashboard .dsh-plant.on .chip{ stroke:#9b1c1c; fill-opacity:1; }
+#panel-dashboard .dsh-plant.focus .chip{ stroke:#dc2626; fill-opacity:1; }
+#panel-dashboard .dsh-plant text.pn{ font-size:11px; font-weight:800; fill:#450a0a; }
+#panel-dashboard .dsh-plant text.pv{ font-size:9px; font-weight:600; fill:#a8a29e; }
+#panel-dashboard .dsh-plant.focus text.pn{ fill:#9b1c1c; }
+#panel-dashboard .dsh-pulse{ pointer-events:none; }
+#panel-dashboard .dsh-maplbl{ font-size:8.5px; font-weight:700; fill:#cdbfbb; letter-spacing:.14em; }
+
+/* focus sweep during auto brief */
+#panel-dashboard .dsh-scan{ position:absolute; inset:0; pointer-events:none; opacity:0;
+  background:radial-gradient(circle at var(--fx,50%) var(--fy,50%), rgba(220,38,38,.10) 0%, rgba(220,38,38,0) 26%);
+  transition:opacity .6s var(--ease); }
+#panel-dashboard .dsh-scan.on{ opacity:1; }
+
+#panel-dashboard .dsh-offmap{ position:absolute; left:14px; bottom:12px; font-size:9.5px; color:#bcaeaa;
+  letter-spacing:.04em; max-width:230px; line-height:1.5; }
+
+/* ── AUTO BRIEF RAIL ───────────────────────────────────── */
+#panel-dashboard .dsh-brief{ border-left:1px solid #f5efee; background:linear-gradient(180deg,#fffdfd,#fdf8f7);
+  display:flex; flex-direction:column; min-height:0; }
+#panel-dashboard .dsh-brief-hd{ display:flex; align-items:center; justify-content:space-between; gap:8px;
+  padding:13px 16px 11px; border-bottom:1px solid #f7f1f0; }
+#panel-dashboard .dsh-brief-eyebrow{ font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.16em; color:#c0b2ae; }
+#panel-dashboard .dsh-brief-toggle{ display:flex; align-items:center; gap:6px; font-size:10px; font-weight:700;
+  letter-spacing:.06em; text-transform:uppercase; color:#9b1c1c; background:#fdf2f2; border:1px solid #f6dedc;
+  border-radius:999px; padding:4px 10px; cursor:pointer; transition:all .18s var(--ease); }
+#panel-dashboard .dsh-brief-toggle:hover{ background:#fbe6e5; }
+#panel-dashboard .dsh-brief-toggle .dot{ width:5px; height:5px; border-radius:50%; background:#16a34a;
+  animation:dshBeat 2.2s ease-in-out infinite; }
+#panel-dashboard .dsh-brief-toggle.paused .dot{ background:#c0b2ae; animation:none; }
+@keyframes dshBeat{ 0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(22,163,74,.45);} 50%{opacity:.5;box-shadow:0 0 0 4px rgba(22,163,74,0);} }
+
+#panel-dashboard .dsh-brief-body{ flex:1; padding:15px 16px; min-height:196px; }
+#panel-dashboard .dsh-brief-body.swap{ animation:dshBriefIn .42s var(--ease); }
+@keyframes dshBriefIn{ from{opacity:0; transform:translateY(7px);} to{opacity:1; transform:none;} }
+#panel-dashboard .dsh-bplant{ font-size:17px; font-weight:800; color:var(--navy); letter-spacing:-.015em; line-height:1.15; }
+#panel-dashboard .dsh-baddr{ font-size:10.5px; color:#b0a29e; margin-top:3px; line-height:1.45; }
+#panel-dashboard .dsh-bfig{ display:flex; gap:14px; margin:13px 0 12px; }
+#panel-dashboard .dsh-bfig div{ flex:1; }
+#panel-dashboard .dsh-bfig .fl{ font-size:8.5px; font-weight:700; text-transform:uppercase; letter-spacing:.11em; color:#c0b2ae; }
+#panel-dashboard .dsh-bfig .fv{ font-family:'Aptos','Inter',sans-serif; font-size:16px; font-weight:800; color:var(--navy);
+  font-variant-numeric:tabular-nums; margin-top:2px; letter-spacing:-.02em; }
+#panel-dashboard .dsh-bfig .fv.g{ color:#15803d; }
+#panel-dashboard .dsh-bline{ height:1px; background:#f5efee; margin:12px 0; }
+#panel-dashboard .dsh-borg{ display:flex; align-items:center; gap:8px; font-size:11px; padding:5px 0; }
+#panel-dashboard .dsh-borg .od{ width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+#panel-dashboard .dsh-borg .oc{ flex:1; color:#57534e; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#panel-dashboard .dsh-borg .ov{ font-size:10px; color:#b0a29e; font-variant-numeric:tabular-nums; }
+#panel-dashboard .dsh-bnote{ font-size:10.5px; color:#a8a29e; line-height:1.55; }
+#panel-dashboard .dsh-brief-ft{ padding:10px 16px 13px; border-top:1px solid #f7f1f0; display:flex; gap:5px; }
+#panel-dashboard .dsh-bdot{ flex:1; height:3px; border-radius:2px; background:#f0e7e5; cursor:pointer; transition:background .25s var(--ease); }
+#panel-dashboard .dsh-bdot:hover{ background:#e0cbc7; }
+#panel-dashboard .dsh-bdot.on{ background:#9b1c1c; }
+
+@media (max-width:1100px){
+  #panel-dashboard .dsh-stage{ grid-template-columns:1fr; }
+  #panel-dashboard .dsh-brief{ border-left:none; border-top:1px solid #f5efee; }
+}
+@media (prefers-reduced-motion: reduce){
+  #panel-dashboard .dsh-brief-toggle .dot{ animation:none; }
+  #panel-dashboard .dsh-brief-body.swap{ animation:none; }
+}
+
+/* ── battery graph ──────────────────────────────────── */
+#panel-dashboard .dsh-grid2{ display:grid; grid-template-columns:1.35fr 1fr; gap:16px; margin-bottom:16px; }
+#panel-dashboard .dsh-batts{ display:flex; align-items:flex-end; justify-content:space-around; gap:10px; padding:6px 0 0; min-height:210px; }
+#panel-dashboard .dsh-batt{ display:flex; flex-direction:column; align-items:center; gap:7px; cursor:pointer; flex:1; max-width:82px; }
+#panel-dashboard .dsh-batt .cap{ width:20px; height:5px; border-radius:3px 3px 0 0; background:#e7e5e4; transition:background .18s; }
+#panel-dashboard .dsh-batt.on .cap, #panel-dashboard .dsh-batt:hover .cap{ background:#9b1c1c; }
+#panel-dashboard .dsh-batt .shell{ width:100%; height:150px; border:2px solid #e7e5e4; border-radius:9px; background:#fafaf9;
+  display:flex; flex-direction:column-reverse; overflow:hidden; padding:3px; gap:2px; transition:border-color .18s, box-shadow .18s; }
+#panel-dashboard .dsh-batt.on .shell{ border-color:#9b1c1c; box-shadow:0 0 0 3px rgba(155,28,28,.09); }
+#panel-dashboard .dsh-batt:hover .shell{ border-color:#c4b5b5; }
+#panel-dashboard .dsh-batt .cell{ width:100%; border-radius:3px; transition:height .55s cubic-bezier(.22,1,.36,1), opacity .18s; min-height:2px; }
+#panel-dashboard .dsh-batt .ml{ font-size:10.5px; font-weight:700; color:#78716c; }
+#panel-dashboard .dsh-batt.on .ml{ color:#9b1c1c; }
+#panel-dashboard .dsh-batt .mv{ font-family:'Aptos','Inter',sans-serif; font-size:11px; font-weight:800; color:var(--navy); }
+#panel-dashboard .dsh-batt.faded{ opacity:.35; }
+
+/* ── donut ──────────────────────────────────────────── */
+#panel-dashboard .dsh-mix{ display:flex; align-items:center; gap:16px; }
+#panel-dashboard .dsh-mix svg{ flex-shrink:0; }
+#panel-dashboard .dsh-arc{ cursor:pointer; transition:opacity .18s, stroke-width .18s; }
+#panel-dashboard .dsh-arc:hover{ stroke-width:19; }
+#panel-dashboard .dsh-arc.faded{ opacity:.22; }
+#panel-dashboard .dsh-mixlist{ flex:1; display:flex; flex-direction:column; gap:6px; min-width:0; }
+#panel-dashboard .dsh-mrow{ display:flex; align-items:center; gap:9px; font-size:12px; cursor:pointer; padding:5px 7px; border-radius:7px; transition:background .15s; }
+#panel-dashboard .dsh-mrow:hover{ background:#fafaf9; }
+#panel-dashboard .dsh-mrow.on{ background:#fef2f2; }
+#panel-dashboard .dsh-mrow.faded{ opacity:.4; }
+#panel-dashboard .dsh-mrow .sw{ width:10px; height:10px; border-radius:3px; flex-shrink:0; }
+#panel-dashboard .dsh-mrow .mn{ flex:1; color:#44403c; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#panel-dashboard .dsh-mrow .mv{ font-family:'Aptos','Inter',sans-serif; font-size:11px; font-weight:800; color:var(--navy); }
+
+/* ── warehouse drawer ───────────────────────────────── */
+#panel-dashboard .dsh-drawer{ background:#fff; border:1px solid #e5e7eb; border-radius:14px; box-shadow:0 1px 4px rgba(0,0,0,.06); overflow:hidden; margin-bottom:16px; }
+#panel-dashboard .dsh-dhd{ padding:16px 20px; border-bottom:1px solid #f5f5f4; display:flex; align-items:flex-start; justify-content:space-between; gap:14px; }
+#panel-dashboard .dsh-dhd .dn{ font-size:17px; font-weight:800; color:var(--navy); letter-spacing:-.01em; }
+#panel-dashboard .dsh-dhd .da{ font-size:12px; color:#78716c; margin-top:3px; line-height:1.5; }
+#panel-dashboard .dsh-dbody{ padding:18px 20px; display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+#panel-dashboard .dsh-dsec h4{ font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.11em; color:#a8a29e; margin-bottom:9px; }
+#panel-dashboard .dsh-drow{ display:flex; justify-content:space-between; gap:12px; font-size:12px; padding:6px 0; border-bottom:1px solid #fafaf9; }
+#panel-dashboard .dsh-drow:last-child{ border-bottom:none; }
+#panel-dashboard .dsh-drow .dk{ color:#a8a29e; } #panel-dashboard .dsh-drow .dv{ color:#44403c; font-weight:600; text-align:right; }
+#panel-dashboard .dsh-contacts{ display:flex; flex-wrap:wrap; gap:8px; }
+#panel-dashboard .dsh-ct{ display:flex; align-items:center; gap:7px; background:#fafaf9; border:1px solid #f0efee; border-radius:8px; padding:5px 9px 5px 5px; }
+#panel-dashboard .dsh-ct .av{ width:24px; height:24px; border-radius:6px; background:linear-gradient(135deg,#9b1c1c,#450a0a); color:#fff;
+  font-size:9px; font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+#panel-dashboard .dsh-ct .cn{ font-size:11px; font-weight:700; color:#44403c; line-height:1.25; }
+#panel-dashboard .dsh-ct .ce{ font-size:9.5px; color:#a8a29e; }
+#panel-dashboard .dsh-pos{ display:flex; flex-direction:column; gap:5px; }
+#panel-dashboard .dsh-po{ display:flex; align-items:center; gap:9px; font-size:11.5px; padding:6px 9px; border-radius:7px; background:#fafaf9; }
+#panel-dashboard .dsh-po .pp{ font-weight:800; color:#450a0a; min-width:52px; }
+#panel-dashboard .dsh-po .pv{ flex:1; color:#78716c; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#panel-dashboard .dsh-po .pa{ font-family:'Aptos','Inter',sans-serif; font-weight:800; color:#15803d; }
+#panel-dashboard .dsh-badge{ display:inline-block; font-size:9.5px; font-weight:700; padding:3px 9px; border-radius:999px; }
+#panel-dashboard .dsh-badge.green{ background:#dcfce7; color:#15803d; }
+#panel-dashboard .dsh-badge.gold{ background:#fef3c7; color:#92400e; }
+
+
+/* ── in-transit manifest ───────────────────────────────── */
+#panel-dashboard .dsh-manifest{ display:flex; flex-direction:column; gap:9px; max-height:330px; overflow-y:auto; padding-right:3px; }
+#panel-dashboard .dsh-leg{ border:1px solid #f2eae8; border-radius:9px; padding:8px 10px; background:#fffdfd; }
+#panel-dashboard .dsh-leg.late{ border-color:#f6cfcf; background:#fffafa; }
+#panel-dashboard .dsh-leg.now{ border-color:#fbe3b8; background:#fffdf6; }
+#panel-dashboard .dsh-leg.na{ opacity:.62; }
+#panel-dashboard .dsh-leg .lg-top{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+#panel-dashboard .dsh-leg .lg-ref{ font-size:11.5px; font-weight:800; color:#3f1010; }
+#panel-dashboard .dsh-leg .lg-state{ font-size:9.5px; font-weight:700; color:#a8a29e; white-space:nowrap; }
+#panel-dashboard .dsh-leg.late .lg-state{ color:#b91c1c; }
+#panel-dashboard .dsh-leg.now  .lg-state{ color:#b45309; }
+#panel-dashboard .dsh-leg.ok   .lg-state{ color:#15803d; }
+#panel-dashboard .dsh-leg .lg-who{ font-size:10px; color:#a8a29e; margin:2px 0 6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#panel-dashboard .dsh-leg .lg-bar{ height:4px; border-radius:3px; background:#f2eae8; overflow:hidden; }
+#panel-dashboard .dsh-leg .lg-bar i{ display:block; height:100%; border-radius:3px; transition:width .6s var(--ease); }
+#panel-dashboard .dsh-leg.late .lg-bar i{ background:#dc2626 !important; }
+#panel-dashboard .dsh-leg .lg-foot{ font-size:9px; color:#bcaeaa; margin-top:5px; font-variant-numeric:tabular-nums; }
+#panel-dashboard .dsh-lane.rest{ stroke-dasharray:3 5; }
+#panel-dashboard .dsh-pulse.late{ filter:drop-shadow(0 0 4px rgba(220,38,38,.75)); }
+
+
+#panel-dashboard .dsh-leg{ cursor:pointer; transition:border-color .18s var(--ease), background .18s var(--ease), transform .18s var(--ease); }
+#panel-dashboard .dsh-leg:hover{ border-color:#dcbcb8; transform:translateX(2px); }
+#panel-dashboard .dsh-leg.picked{ border-color:#9b1c1c; background:#fff6f6; box-shadow:0 0 0 3px rgba(155,28,28,.08); }
+#panel-dashboard .dsh-pulse{ transition:filter .18s var(--ease); }
+#panel-dashboard .dsh-pulse.spot{ filter:drop-shadow(0 0 6px rgba(155,28,28,.85)); }
+
+@media print{ #panel-dashboard{ display:none !important; } }
+@media (max-width:1100px){
+  #panel-dashboard .dsh-grid2{ grid-template-columns:1fr; }
+  #panel-dashboard .dsh-kpis{ grid-template-columns:repeat(2,1fr); }
+  #panel-dashboard .dsh-dbody{ grid-template-columns:1fr; }
+}
+
+</style>
+
+
+<style>
+/* ══════════════════════════════════════════════════════════════
+   REFINEMENT LAYER
+   Purely additive. Loaded last so it cascades over the rules
+   above without editing a single one of them. No markup, no
+   geometry, no behaviour changes — surface treatment only.
+
+   Guard rails observed:
+     · nothing captured by html2canvas gets backdrop-filter,
+       transforms or modern colour functions (see EXPORT SAFETY)
+     · every existing @media print rule is left untouched
+     · all motion is disabled under prefers-reduced-motion
+═══════════════════════════════════════════════════════════════ */
+
+:root{
+  /* layered depth — replaces flat 1px shadows with real elevation */
+  --e1: 0 1px 2px rgba(69,10,10,.04), 0 2px 6px rgba(69,10,10,.045);
+  --e2: 0 1px 2px rgba(69,10,10,.04), 0 4px 14px rgba(69,10,10,.07);
+  --e3: 0 2px 4px rgba(69,10,10,.05), 0 12px 32px rgba(69,10,10,.10);
+  --e4: 0 8px 20px rgba(69,10,10,.10), 0 28px 70px rgba(69,10,10,.16);
+  --ring: 0 0 0 3px rgba(155,28,28,.14);
+  --hair: rgba(69,10,10,.07);
+  --ease: cubic-bezier(.22,1,.36,1);
+}
+
+/* ── canvas ─────────────────────────────────────────────── */
+body{
+  background:
+    radial-gradient(1200px 620px at 12% -8%, #fff8f6 0%, rgba(255,248,246,0) 58%),
+    radial-gradient(900px 520px at 100% 0%, #fff3f1 0%, rgba(255,243,241,0) 52%),
+    #fdf2f2;
+  background-attachment: fixed;
+}
+::selection{ background:#9b1c1c; color:#fff; }
+
+/* refined scrollbars — desktop only, harmless elsewhere */
+*::-webkit-scrollbar{ width:11px; height:11px; }
+*::-webkit-scrollbar-track{ background:transparent; }
+*::-webkit-scrollbar-thumb{
+  background:#e4d5d3; border-radius:8px; border:3px solid transparent; background-clip:content-box;
+}
+*::-webkit-scrollbar-thumb:hover{ background:#cbb4b1; background-clip:content-box; }
+
+/* keyboard focus that actually reads as intentional */
+:focus-visible{ outline:none; box-shadow:var(--ring); border-radius:8px; }
+
+/* ── masthead: glass + a lit edge ───────────────────────── */
+.masthead{
+  box-shadow: 0 1px 0 rgba(69,10,10,.05), 0 6px 24px rgba(69,10,10,.07);
+  border-bottom-color: rgba(69,10,10,.06);
+}
+.masthead::after{
+  content:''; position:absolute; left:0; right:0; bottom:0; height:1px;
+  background:linear-gradient(90deg, rgba(155,28,28,0) 0%, rgba(220,38,38,.35) 42%, #fcd34d 72%, rgba(252,211,77,0) 100%);
+  pointer-events:none;
+}
+.masthead{ position:sticky; }
+/* The logo stays a plain mark on the masthead. It is still clickable, but it
+   must never pick up a raised edge, a lift, a tap flash or a focus ring —
+   any of those read as "button" against the white header. */
+.logo-wrap,
+.logo-wrap *{
+  -webkit-tap-highlight-color: transparent;
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  filter: none !important;
+  transform: none !important;
+  transition: none !important;
+  border-radius: 0 !important;
+}
+.logo-wrap:hover, .logo-wrap:active, .logo-wrap:focus, .logo-wrap:focus-visible,
+.logo-wrap:hover img, .logo-wrap:active img, .logo-wrap:focus img{
+  background: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  filter: none !important;
+  transform: none !important;
+  opacity: 1 !important;
+}
+.logo-wrap img{ -webkit-user-drag: none; user-select: none; }
+
+/* header figures: tabular so they stop dancing as data updates */
+.hstat-val{ font-variant-numeric: tabular-nums; }
+.hstat-divider{ background:linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,.55) 50%, rgba(255,255,255,0) 100%); }
+
+/* ── nav: sliding underline + hover pill ────────────────── */
+.nav-bar{
+  background: rgba(255,255,255,.86);
+  backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
+  box-shadow: 0 1px 3px rgba(69,10,10,.05);
+  border-bottom-color: var(--hair);
+}
+.nav-tab{
+  position:relative; border-bottom-color:transparent !important;
+  transition: color .2s var(--ease), background-color .2s var(--ease);
+}
+.nav-tab{ background-color:rgba(155,28,28,0); border-radius:9px 9px 0 0; }
+.nav-tab:hover{ background-color:rgba(155,28,28,.05); }
+.nav-tab.active{ background-color:rgba(155,28,28,.045); }
+.nav-tab::after{
+  content:''; position:absolute; left:50%; right:50%; bottom:0; height:3px; border-radius:3px 3px 0 0;
+  background:linear-gradient(90deg,#9b1c1c,#dc2626);
+  transition: left .28s var(--ease), right .28s var(--ease);
+}
+.nav-tab.active::after{ left:14px; right:14px; }
+.nav-tab .nav-icon{ transition: transform .25s var(--ease); }
+.nav-tab:hover .nav-icon{ transform: translateY(-1px); }
+.nav-badge{
+  box-shadow: inset 0 0 0 1px rgba(155,28,28,.10);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── surfaces ───────────────────────────────────────────── */
+.card{
+  border-color: var(--hair);
+  box-shadow: var(--e1);
+  background:
+    linear-gradient(180deg, #ffffff 0%, #fffdfd 100%);
+  transition: box-shadow .3s var(--ease), border-color .3s var(--ease);
+}
+.card:hover{ box-shadow: var(--e2); }
+.card-hd{
+  border-bottom-color: var(--hair);
+  background: linear-gradient(180deg, rgba(255,251,251,.9), rgba(255,255,255,0));
+}
+.card-title{ color:#a89a97; }
+
+/* ── metric cards: the hero numbers ─────────────────────── */
+.metric-card{
+  border-color: var(--hair);
+  box-shadow: var(--e1);
+  transition: transform .3s var(--ease), box-shadow .3s var(--ease);
+}
+.metric-card:hover{ transform: translateY(-2px); box-shadow: var(--e3); }
+.metric-card::before{ height:3px; opacity:.95; }
+.metric-card{ background:linear-gradient(180deg, #fffcfc 0%, #ffffff 58%); }
+.metric-card.green{ background:linear-gradient(180deg, #fbfefc 0%, #ffffff 58%); }
+.metric-card.amber{ background:linear-gradient(180deg, #fffdf8 0%, #ffffff 58%); }
+.metric-val{ font-variant-numeric: tabular-nums; letter-spacing:-.022em; }
+.metric-lbl{ color:#a89a97; }
+
+/* ── buttons: lift, gradient, honest pressed state ──────── */
+.btn{
+  transition: transform .16s var(--ease), box-shadow .22s var(--ease), background .18s, border-color .18s, color .18s;
+  will-change: transform;
+}
+.btn:active{ transform: translateY(1px) scale(.988); }
+.btn-primary{
+  background:linear-gradient(180deg,#a82024 0%,#9b1c1c 100%);
+  box-shadow: 0 1px 2px rgba(69,10,10,.18), inset 0 1px 0 rgba(255,255,255,.13);
+}
+.btn-primary:hover{
+  background:linear-gradient(180deg,#dc2626 0%,#c01f26 100%);
+  box-shadow: 0 3px 12px rgba(155,28,28,.30), inset 0 1px 0 rgba(255,255,255,.16);
+  transform: translateY(-1px);
+}
+.btn-success{ background:linear-gradient(180deg,#188544 0%,#15803d 100%); box-shadow:0 1px 2px rgba(6,64,30,.2), inset 0 1px 0 rgba(255,255,255,.13); }
+.btn-success:hover{ box-shadow:0 3px 12px rgba(21,128,61,.28); transform:translateY(-1px); }
+.btn-danger{ background:linear-gradient(180deg,#e02c2c 0%,#dc2626 100%); box-shadow:0 1px 2px rgba(105,12,12,.2), inset 0 1px 0 rgba(255,255,255,.13); }
+.btn-danger:hover{ box-shadow:0 3px 12px rgba(220,38,38,.30); transform:translateY(-1px); }
+.btn-amber{ background:linear-gradient(180deg,#e08108 0%,#d97706 100%); box-shadow:0 1px 2px rgba(87,45,2,.18), inset 0 1px 0 rgba(255,255,255,.13); }
+.btn-amber:hover{ box-shadow:0 3px 12px rgba(217,119,6,.28); transform:translateY(-1px); }
+.btn-blue{ background:linear-gradient(180deg,#2154e0 0%,#1d4ed8 100%); box-shadow:0 1px 2px rgba(12,29,88,.2), inset 0 1px 0 rgba(255,255,255,.13); }
+.btn-blue:hover{ box-shadow:0 3px 12px rgba(29,78,216,.28); transform:translateY(-1px); }
+.btn-outline{
+  border-color:#e6dcdb; box-shadow:0 1px 2px rgba(69,10,10,.04);
+}
+.btn-outline:hover{ background:#fffaf9; border-color:#d3bdbb; transform:translateY(-1px); box-shadow:var(--e2); }
+.btn-ghost:hover{ transform:translateY(-1px); }
+
+/* ── fields ─────────────────────────────────────────────── */
+.field label{ color:#8a7c79; letter-spacing:.085em; }
+.field input, .field select, .field textarea{
+  border-color:#ece2e1; background:#fffdfd;
+  transition: border-color .18s var(--ease), box-shadow .18s var(--ease), background .18s;
+}
+.field input:hover, .field select:hover, .field textarea:hover{ border-color:#dcc9c7; }
+.field input:focus, .field select:focus, .field textarea:focus{
+  background:#fff; border-color:#9b1c1c; box-shadow:var(--ring);
+}
+.field input::placeholder, .field textarea::placeholder{ color:#cfc2c0; }
+
+/* ── tables ─────────────────────────────────────────────── */
+.data-table th{
+  background:linear-gradient(180deg,#fdfafa,#fbf6f6);
+  color:#a89a97; border-bottom-color:var(--hair); letter-spacing:.1em;
+}
+.data-table td{ border-bottom-color:#f7f1f1; }
+.data-table tr{ transition: background .14s; }
+.data-table tr:hover td{ background:#fffaf9; }
+.cell-money{ font-variant-numeric: tabular-nums; }
+.data-table td:first-child, .data-table th:first-child{ padding-left:18px; }
+.data-table td:last-child,  .data-table th:last-child{ padding-right:18px; }
+
+/* ── modals ─────────────────────────────────────────────── */
+.modal-overlay{
+  background:rgba(46,10,10,.42);
+  backdrop-filter: blur(6px) saturate(140%);
+  -webkit-backdrop-filter: blur(6px) saturate(140%);
+}
+.modal{
+  box-shadow: var(--e4);
+  border:1px solid rgba(255,255,255,.65);
+  animation: polishRise .28s var(--ease);
+}
+@keyframes polishRise{
+  from{ opacity:0; transform: translateY(12px) scale(.985); }
+  to  { opacity:1; transform:none; }
+}
+.modal-hd{ border-bottom-color:var(--hair); }
+.modal-ft{ border-top-color:var(--hair); background:linear-gradient(180deg,rgba(255,255,255,0),rgba(253,247,247,.7)); }
+
+/* panel entrance: the app's own slideIn is kept as-is, not overridden */
+
+/* ── dashboard: inherit the same depth language ─────────── */
+#panel-dashboard .dsh-filters,
+#panel-dashboard .dsh-board,
+#panel-dashboard .dsh-drawer{ border-color:var(--hair); box-shadow:var(--e1); }
+#panel-dashboard .dsh-board{ box-shadow:var(--e2); }
+#panel-dashboard .dsh-kpi{
+  border-color:var(--hair); box-shadow:var(--e1);
+  transition: transform .3s var(--ease), box-shadow .3s var(--ease);
+}
+#panel-dashboard .dsh-kpi:hover{ transform:translateY(-2px); box-shadow:var(--e3); }
+#panel-dashboard .dsh-kpi .kv{ font-variant-numeric:tabular-nums; letter-spacing:-.022em; }
+#panel-dashboard .dsh-chip{ transition: all .18s var(--ease); }
+#panel-dashboard .dsh-chip:hover{ transform:translateY(-1px); }
+#panel-dashboard .dsh-chip.on{ box-shadow:0 2px 8px rgba(155,28,28,.22); }
+#panel-dashboard .dsh-ctrl,
+#panel-dashboard .dsh-speed{ transition: all .18s var(--ease); }
+#panel-dashboard .dsh-ctrl:hover,
+#panel-dashboard .dsh-speed:hover{ transform:translateY(-1px); box-shadow:var(--e1); }
+#panel-dashboard .dsh-batt .shell{ box-shadow: inset 0 1px 3px rgba(69,10,10,.05); }
+#panel-dashboard .dsh-batt{ transition: transform .22s var(--ease); }
+#panel-dashboard .dsh-batt:hover{ transform:translateY(-2px); }
+
+/* ── EXPORT SAFETY ──────────────────────────────────────────
+   html2canvas rasterises .quote-preview-bar. It cannot render
+   backdrop-filter and mis-handles transforms, so this layer's
+   effects are explicitly neutralised inside those elements.
+════════════════════════════════════════════════════════════ */
+.quote-preview-bar, .quote-preview-bar *{
+  backdrop-filter:none !important; -webkit-backdrop-filter:none !important;
+  animation:none !important;
+}
+.quote-preview-bar .btn:hover,
+.quote-preview-bar .card:hover,
+.quote-preview-bar .metric-card:hover{ transform:none !important; }
+
+/* the refinement layer is decoration — it must never reach paper */
+@media print{
+  .card, .metric-card, .modal, .btn{ box-shadow:none !important; transform:none !important; }
+  .modal{ animation:none !important; }
+  .nav-bar{ backdrop-filter:none !important; -webkit-backdrop-filter:none !important; }
+  body{ background:#fff !important; }
+}
+
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{
+    animation-duration:.001ms !important; animation-iteration-count:1 !important;
+    transition-duration:.001ms !important; scroll-behavior:auto !important;
+  }
+  .metric-card:hover, .btn:hover, .dsh-kpi:hover, .dsh-batt:hover{ transform:none !important; }
+}
+
+</style>
+
 </head>
 <body>
 
@@ -1097,6 +1657,10 @@ svg.icon-sm { width: 13px; height: 13px; fill: none; stroke: currentColor; strok
 
 <!-- NAV -->
 <nav class="nav-bar">
+  <div class="nav-tab" id="tab-dashboard" onclick="switchTab('dashboard',this)">
+    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="13" height="10" rx="1.5"/><path d="M14 9h4l3 3.5V16h-7z"/><circle cx="5.5" cy="18.5" r="1.8"/><circle cx="17" cy="18.5" r="1.8"/></svg>
+    Dashboard
+  </div>
   <div class="nav-tab active" id="tab-new-quote" onclick="switchTab('new-quote',this)">
     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
     New Quote
@@ -2169,6 +2733,102 @@ svg.icon-sm { width: 13px; height: 13px; fill: none; stroke: currentColor; strok
   </div>
 </div>
 
+<!-- ══════════════════════════════════════════════════════
+     DASHBOARD — live dispatch board (additive layer)
+═══════════════════════════════════════════════════════════ -->
+<div class="panel" id="panel-dashboard">
+
+  <div class="dsh-top">
+    <div>
+      <h1>Dispatch Dashboard</h1>
+      <p>Every truck on the board is a real shipment or plant transfer from your records, driving to the plant that received it. Solid trucks are inbound freight; hollow trucks on dashed lanes are inter-plant transfers. Click a truck, a warehouse, a month or a carrier — everything cross-filters together.</p>
+    </div>
+  </div>
+
+  <!-- FILTERS -->
+  <div class="dsh-filters">
+    <div class="dsh-fgroup"><span class="dsh-flabel">Month</span><span id="dsh-months"></span></div>
+    <div class="dsh-fsep"></div>
+    <div class="dsh-fgroup"><span class="dsh-flabel">Carrier</span><span id="dsh-carriers"></span></div>
+    <button class="dsh-reset" id="dsh-reset" onclick="dshReset()">Clear filters</button>
+  </div>
+
+  <!-- KPIs -->
+  <div class="dsh-kpis" id="dsh-kpis"></div>
+
+  <!-- DISPATCH BOARD -->
+  <div class="dsh-board">
+    <div class="dsh-bhd">
+      <div>
+        <div class="bt">Live dispatch board</div>
+        <div class="bv" id="dsh-board-sub">—</div>
+      </div>
+      <div class="dsh-seg" role="tablist" aria-label="Board view">
+        <button class="on" id="dsh-view-all" onclick="dshSetView('all')">All shipments</button>
+        <button id="dsh-view-transit" onclick="dshSetView('transit')">In transit</button>
+      </div>
+      <div class="dsh-ctrls">
+        <button class="dsh-ctrl on" id="dsh-play" onclick="dshTogglePlay()" title="Pause / resume the convoy" aria-label="Pause or resume">
+          <svg viewBox="0 0 24 24" fill="currentColor" id="dsh-play-i"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+        </button>
+        <button class="dsh-speed" id="dsh-speed" onclick="dshCycleSpeed()" title="Playback speed">1&times;</button>
+        <button class="dsh-ctrl" onclick="dshShowAllPlants()" title="Show every plant, including ones with no shipments yet" id="dsh-allplants" aria-label="Toggle empty plants">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V8l7-5 7 5v13"/><path d="M9 21v-6h6v6"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="dsh-stage" id="dsh-stage">
+      <div class="dsh-mapwrap">
+        <svg id="dsh-svg" viewBox="0 0 960 600" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Freight network map of the United States showing origin to plant lanes"></svg>
+        <div class="dsh-scan" id="dsh-scan"></div>
+        <div class="dsh-tip" id="dsh-tip"></div>
+        <div class="dsh-offmap" id="dsh-offmap"></div>
+      </div>
+      <aside class="dsh-brief" id="dsh-brief">
+        <div class="dsh-brief-hd">
+          <span class="dsh-brief-eyebrow" id="dsh-brief-eyebrow">Auto brief</span>
+          <button class="dsh-brief-toggle" id="dsh-brief-toggle" onclick="dshToggleBrief()" title="Pause or resume the auto brief">
+            <span class="dot"></span><span id="dsh-brief-state">Live</span>
+          </button>
+        </div>
+        <div class="dsh-brief-body" id="dsh-brief-body"></div>
+        <div class="dsh-brief-ft" id="dsh-brief-ft"></div>
+      </aside>
+      <div class="dsh-tip" id="dsh-tip2" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- WAREHOUSE DRAWER -->
+  <div class="dsh-drawer" id="dsh-drawer" style="display:none;"></div>
+
+  <!-- BATTERY + MIX -->
+  <div class="dsh-grid2">
+    <div class="card">
+      <div class="card-hd">
+        <span class="card-title">Monthly spend by carrier</span>
+        <span class="card-title" id="dsh-batt-tot">—</span>
+      </div>
+      <div class="card-body">
+        <div class="dsh-batts" id="dsh-batts"></div>
+        <p style="font-size:11px;color:#a8a29e;margin-top:12px;text-align:center;">Each cell is a carrier's share of that month. Click a battery to filter the board.</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-hd">
+        <span class="card-title">Carrier mix</span>
+        <span class="card-title" id="dsh-mix-n">—</span>
+      </div>
+      <div class="card-body">
+        <div class="dsh-mix">
+          <svg width="124" height="124" viewBox="0 0 124 124" id="dsh-donut"></svg>
+          <div class="dsh-mixlist" id="dsh-mixlist"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
 </div><!-- /workspace -->
 
 <!-- ══════════════════════════════════════════════════════
@@ -2261,6 +2921,10 @@ svg.icon-sm { width: 13px; height: 13px; fill: none; stroke: currentColor; strok
     </div>
     <div class="modal-ft">
       <button class="btn btn-outline" onclick="closeModal('modal-edit-shipment')">Cancel</button>
+      <button class="btn btn-blue" onclick="saveEditAndReprint()" title="Save the changes and download an updated quote image">
+        <svg class="icon-sm" viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
+        Save &amp; Re-download
+      </button>
       <button class="btn btn-primary" onclick="saveEditShipment()">Save Changes</button>
     </div>
   </div>
@@ -2743,10 +3407,12 @@ function switchTab(id, el) {
   document.body.classList.toggle('compare-active',  id === 'compare');
   document.body.classList.toggle('history-active',  id === 'history');
   document.body.classList.toggle('vendors-active',  id === 'vendors');
+  document.body.classList.toggle('dashboard-active', id === 'dashboard');
   if(id==='history'){renderHistory();renderHistoryMetrics();}
   if(id==='vendors'){renderVendors();}
   if(id==='compare'){populateCompareSel();}
   if(id==='transfer'){renderTransfers();renderTransferMetrics();renderCombined();populateTransferCompareSel();}
+  if(id==='dashboard'){renderDashboard();}
 }
 
 function updateNavBadges(){
@@ -3958,6 +4624,9 @@ function renderHistory(){
         <div class="row-actions">
           <button class="btn btn-icon-sm btn-ghost" onclick="openEditShipment(${s.id})" title="Edit">
             <svg class="icon-sm" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="btn btn-icon-sm" style="background:#eff6ff;color:#1d4ed8;border:none;" onclick="reprintQuote(${s.id})" title="Re-download quote image">
+            <svg class="icon-sm" viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
           </button>
           <button class="btn btn-icon-sm" style="background:#fee2e2;color:#dc2626;border:none;" onclick="deleteShipment(${s.id})" title="Delete">
             <svg class="icon-sm" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
@@ -7381,6 +8050,1243 @@ function showToast(msg,type=''){
   if(toastTimeout)clearTimeout(toastTimeout);
   toastTimeout=setTimeout(()=>t.className='toast',3200);
 }
+
+// ═══════════════════════════════════════════════════════
+//  RE-PRINT A SAVED QUOTE
+//  Lets a shipment that was already saved (and possibly
+//  edited afterwards) regenerate its Quote Request image
+//  without re-typing anything.
+//
+//  It writes straight into the preview document and then
+//  calls updatePreview() to put it back — the New Quote
+//  form is never touched, so work in progress is safe.
+// ═══════════════════════════════════════════════════════
+function _rpSet(id, val){
+  const el = document.getElementById(id);
+  if(!el) return;
+  const mods = ['wrap','address','notes'].filter(m => el.classList.contains(m));
+  const base = ['qpb-val', ...mods].join(' ');
+  if(!val || val === '—'){ el.className = base + ' empty'; el.textContent = '—'; }
+  else { el.className = base; el.textContent = val; }
+}
+
+function fillQuotePreviewFrom(s){
+  _rpSet('qp-vendor',  s.vendor || '');
+  _rpSet('qp-po',      s.po || '');
+  _rpSet('qp-pudate',  s.puDate ? fmtDate(s.puDate) : '');
+  _rpSet('qp-deldate', s.delDate ? fmtDate(s.delDate) : '');
+
+  // delLoc is stored bare ("Indiana") on older rows and as the form value
+  // ("Indiana Plant") on newer ones — resolve either to the PLANTS record.
+  const raw = s.delLoc || '';
+  let key = '';
+  if(typeof PLANTS !== 'undefined'){
+    if(PLANTS[raw]) key = raw;
+    else if(PLANTS[raw + ' Plant']) key = raw + ' Plant';
+    else {
+      const first = String(raw).trim().split(/\s+/)[0].toLowerCase();
+      key = Object.keys(PLANTS).find(k => k.toLowerCase().startsWith(first)) || '';
+    }
+  }
+  _rpSet('qp-delloc',  raw ? raw.replace(' Plant','') : '');
+  _rpSet('qp-deladdr', key && PLANTS[key] ? PLANTS[key].address : '');
+
+  const t = document.getElementById('qp-type');  if(t) t.textContent = s.type || 'LTL';
+  const tp = document.getElementById('qp-temp'); if(tp) tp.textContent = s.temp || 'N/A';
+  _rpSet('qp-puaddr', s.puAddr || '');
+  _rpSet('qp-weight', s.weight ? Number(s.weight).toLocaleString('en-US') + ' lbs' : '');
+  _rpSet('qp-dims',   s.dims || '');
+  _rpSet('qp-notes',  s.notes || '');
+  const pl = document.getElementById('qp-pallets'); if(pl) pl.textContent = s.pallets || '—';
+}
+
+async function reprintQuote(id){
+  const s = shipments.find(x => x.id === id);
+  if(!s){ showToast('Shipment not found', 'error'); return; }
+  const el = document.getElementById('quote-preview-bar');
+  if(!el){ showToast('Quote document not found', 'error'); return; }
+  if(typeof html2canvas !== 'function'){ showToast('Image library not loaded — check your connection', 'error'); return; }
+
+  // The preview lives inside the New Quote panel. html2canvas cannot
+  // rasterise a node in a hidden panel, so make sure it is on screen.
+  const panel = document.getElementById('panel-new-quote');
+  const wasHidden = panel && !panel.classList.contains('active');
+  if(wasHidden){
+    const tab = document.getElementById('tab-new-quote');
+    if(tab) switchTab('new-quote', tab);
+  }
+
+  try{
+    fillQuotePreviewFrom(s);
+    const vendorSlug = (s.vendor || 'Quote').replace(/[^a-z0-9]+/gi, '_');
+    const poSlug = (s.po || '').replace(/[^a-z0-9]+/gi, '_');
+    const stamp = new Date().toISOString().slice(0, 10);
+    const parts = ['JSL_Quote_Request', vendorSlug, poSlug, stamp, 'rev'].filter(Boolean);
+    const filename = parts.join('_').replace(/_+/g, '_') + '.jpg';
+    await captureElementAsJpeg(el, filename, `Regenerating quote for PO ${s.po || '#' + s.id}…`);
+    showToast(`Quote image for PO ${s.po || '#' + s.id} downloaded`, 'success');
+  } catch(err){
+    console.error('reprintQuote failed:', err);
+    showToast('Could not generate the quote image', 'error');
+  } finally {
+    // always hand the preview back to whatever is in the form
+    if(typeof updatePreview === 'function') updatePreview();
+  }
+}
+
+// Save the edit modal, then immediately regenerate the image.
+async function saveEditAndReprint(){
+  const idEl = document.getElementById('es-id');
+  const id = idEl ? parseInt(idEl.value) : NaN;
+  if(isNaN(id)){ showToast('Shipment not found', 'error'); return; }
+  saveEditShipment();
+  await reprintQuote(id);
+}
+
+
+// ═══════════════════════════════════════════════════════
+//  DASHBOARD — live dispatch board (2031 layer)
+//  Additive only. Reads shipments / transfers / PLANTS /
+//  classifyShipment(), all defined above and unmodified.
+//  Never writes to any of them.
+// ═══════════════════════════════════════════════════════
+const DSH_CARRIERS = {
+  'LINQ Logistics'  : {short:'LINQ',        color:'#1e40af', light:'#dbeafe'},
+  'CH Robinson'     : {short:'CH Robinson', color:'#15803d', light:'#dcfce7'},
+  'Suntteck Freight': {short:'Suntteck',    color:'#c2410c', light:'#ffedd5'},
+  'J&D Refrigerated': {short:'J&D',         color:'#6d28d9', light:'#ede9fe'},
+  'Blakeman'        : {short:'Blakeman',    color:'#0d9488', light:'#ccfbf1'}
+};
+const DSH_FALLBACK = {short:'Other', color:'#78716c', light:'#f5f5f4'};
+function dshCar(name){
+  if(!name) return DSH_FALLBACK;
+  if(DSH_CARRIERS[name]) return DSH_CARRIERS[name];
+  const hit = Object.keys(DSH_CARRIERS).find(k => name.includes(k) || k.includes(name));
+  return hit ? DSH_CARRIERS[hit] : Object.assign({}, DSH_FALLBACK, {short:name});
+}
+
+// delLoc is stored as 'Indiana' on older rows and 'Indiana Plant' on newer
+// ones (the form value). Resolve both to the PLANTS key when possible.
+function dshPlantKey(delLoc){
+  if(!delLoc) return null;
+  if(typeof PLANTS === 'undefined') return null;
+  if(PLANTS[delLoc]) return delLoc;
+  if(PLANTS[delLoc + ' Plant']) return delLoc + ' Plant';
+  const first = String(delLoc).trim().split(/\s+/)[0].toLowerCase();
+  return Object.keys(PLANTS).find(k => k.toLowerCase().startsWith(first)) || null;
+}
+function dshLocLabel(delLoc){
+  const k = dshPlantKey(delLoc);
+  return k ? k.replace(/ Plant$/,'') : (delLoc || 'Unassigned');
+}
+
+const DSH = { month:null, carrier:null, plant:null, originState:null, view:'all', playing:true, speed:1, showEmpty:false,
+              rafOn:false, arcs:[], locs:[], origins:[], pulses:[], briefOn:true, briefIdx:0, _briefT:null };
+
+const dshMoney  = n => '$' + Math.round(n||0).toLocaleString('en-US');
+const dshMoney2 = n => '$' + Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+function dshEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// Read-only classification pass — mirrors updateHeaderStats() but never
+// assigns back onto the shipment objects.
+function dshRows(){
+  return shipments.map(s => {
+    const cls = s.approvedAmt ? classifyShipment(s) : {saving:0, cost:0};
+    return { s, cost:cls.cost, save:cls.saving, month:(s.date||'').slice(0,7), loc:dshLocLabel(s.delLoc) };
+  });
+}
+function dshMonths(){
+  return [...new Set(shipments.map(s => (s.date||'').slice(0,7)).filter(Boolean))].sort();
+}
+function dshFiltered(){
+  return dshRows().filter(r =>
+    (!DSH.month   || r.month === DSH.month) &&
+    (!DSH.carrier || r.s.approved === DSH.carrier) &&
+    (!DSH.plant   || r.loc === DSH.plant) &&
+    (!DSH.originState || (dshGeo(r.s.puAddr) || {}).st === DSH.originState)
+  );
+}
+function dshMonthLabel(m){
+  try { return new Date(m + '-02').toLocaleDateString('en-US',{month:'short', year:'2-digit'}); }
+  catch(e){ return m; }
+}
+
+/* ── filter actions ─────────────────────────────────── */
+function dshSetMonth(m){   DSH.month   = (DSH.month === m)   ? null : m; renderDashboard(); }
+function dshSetCarrier(c){ DSH.carrier = (DSH.carrier === c) ? null : c; renderDashboard(); }
+function dshSetPlant(p){   DSH.plant   = (DSH.plant === p)   ? null : p; renderDashboard(); }
+function dshReset(){ DSH.month = DSH.carrier = DSH.plant = DSH.originState = null; renderDashboard(); }
+function dshSetView(v){
+  DSH.view = v;
+  const a = document.getElementById('dsh-view-all'), t = document.getElementById('dsh-view-transit');
+  if(a) a.classList.toggle('on', v === 'all');
+  if(t) t.classList.toggle('on', v === 'transit');
+  renderDashboard();
+}
+function dshShowAllPlants(){ DSH.showEmpty = !DSH.showEmpty; renderDashboard(); }
+function dshTogglePlay(){
+  DSH.playing = !DSH.playing;
+  const b = document.getElementById('dsh-play'), i = document.getElementById('dsh-play-i');
+  if(!b || !i) return;
+  b.classList.toggle('on', DSH.playing);
+  i.innerHTML = DSH.playing ? '<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>' : '<path d="M7 4l13 8-13 8z"/>';
+}
+function dshCycleSpeed(){
+  const steps = [1, 2, 4, 0.5];
+  DSH.speed = steps[(steps.indexOf(DSH.speed) + 1) % steps.length];
+  const el = document.getElementById('dsh-speed');
+  if(el) el.innerHTML = DSH.speed + '&times;';
+  dshBriefSchedule();   // brief cadence follows the same speed control
+}
+
+const DSH_MAP={"W":960,"H":600,"states":{"Alabama":"M662.1,468L662.1,468L662.1,468ZM656.2,368.3L700,364.4L712.1,407.7L718.6,419.7L715.3,429.1L717.8,435.6L717.5,442.6L719.8,446.2L673.8,451L679,462.3L676.5,465.8L672.1,466.5L667.1,458.1L665.4,465.9L660.7,465.3L656.8,433.6L658.2,370.4Z","Alaska":"M168.9,516.2L168.9,516.2L168.9,516.2ZM167.7,529.5L167.7,529.5L167.7,529.5ZM164.9,531L164.9,531L164.9,531ZM164.2,531.1L164.2,531.1L164.2,531.1ZM163.7,530.9L163.7,530.9L163.7,530.9ZM163.8,537.8L163.8,537.8L163.8,537.8ZM163,532.7L163,532.7L163,532.7ZM162.6,522.3L162.6,522.3L162.6,522.3ZM161.9,532.8L161.9,532.8L161.9,532.8ZM160.6,523.7L160.6,523.7L160.6,523.7ZM158,539.1L158.9,538.9L160.8,535.4L162.1,534.9L161.4,536.4L163.4,536.9L163.1,538.3L161.1,538.2L159.7,539.7ZM157.4,529.4L157.4,529.4L157.4,529.4ZM155.1,549.1L155.1,549.1L155.1,549.1ZM154.3,550.2L155.4,549.7L155.9,550.5ZM152.7,544.2L154.9,542L155.8,542.1L156.8,540.4L157.8,539.8L161.6,539.8L161.7,542.4L162.9,542.3L162.2,543.7L160.6,543.1L160.8,544.8L159.7,544.4L155.8,548.7L156.5,545.7L154.5,548ZM152.5,551L152.5,551L152.5,551ZM148.6,555.4L148.6,555.4L148.6,555.4ZM144.5,553.7L144.5,553.7L144.5,553.7ZM144.4,552.5L144.4,552.5L144.4,552.5ZM142.4,549.9L142.4,549.9L142.4,549.9ZM140,551.2L140,551.2L140,551.2ZM135.7,554.7L135.7,554.7L135.7,554.7ZM134.7,554.3L134.7,554.3L134.7,554.3ZM133.4,561.3L133.4,561.3L133.4,561.3ZM133.7,555.1L133.7,555.1L133.7,555.1ZM132.9,560.9L132.9,560.9L132.9,560.9ZM132.2,561.9L132.2,561.9L132.2,561.9ZM132.2,559.1L132.2,559.1L132.2,559.1ZM131.3,561.7L131.3,561.7L131.3,561.7ZM131.3,560L131.3,560L131.3,560ZM130.4,557.9L130.4,557.9L130.4,557.9ZM129.6,560.8L130.5,558.9L131.3,559.7ZM131.9,533.4L131.9,533.4L131.9,533.4ZM129.5,557.1L129.5,557.1L129.5,557.1ZM131.5,533.4L131.5,533.4L131.5,533.4ZM127.3,557.7L128.6,557.7L128.6,559.2L127.4,558.8ZM129,533.8L130.6,532.3L129.7,534ZM124.9,558.2L124.9,558.2L124.9,558.2ZM123.8,558L123.8,558L123.8,558ZM122.8,558.7L122.8,558.7L122.8,558.7ZM120.5,559.8L120.5,559.8L120.5,559.8ZM127.7,496.9L127.7,496.9L127.7,496.9ZM118.4,563L118.4,563L118.4,563ZM117.9,555.7L117.9,555.7L117.9,555.7ZM109.5,563.5L109.5,563.5L109.5,563.5ZM107.9,564L107.9,564L107.9,564ZM106.8,564L106.8,564L106.8,564ZM106.3,564.2L106.3,564.2L106.3,564.2ZM106.1,562.6L106.1,562.6L106.1,562.6ZM104.3,563L106,563.7L104.4,563.8ZM103.6,564.1L103.6,564.1L103.6,564.1ZM107.5,518.5L109.4,518.9L110.3,518.2L112.4,517.8L112.5,518.6L113.9,519.1L113.7,521.9L112.1,522L111.4,522.7L107.7,519.6ZM95.7,567.5L97.9,567.1L100.3,565.4L99.4,564.5L101.8,563.5L103.5,564.5L101.8,565.7L103.8,565.1L100.6,567.5L98.9,567.3L96.5,568.1ZM113.5,479.1L118.9,476.6L123.2,474.9L125.6,474.5L127.4,475L126.6,477.5L126.9,478.5L129.9,478.7L132.5,479.5L133.5,478.1L135.2,478.3L133.7,476.9L132.6,477.2L132.8,476L131,473.2L131.9,472.7L132.7,474L132.4,475L133.6,476.6L134.4,476.4L133,474.5L133.8,472.8L133.5,472.1L131.4,472.4L128.1,470.9L127.8,467.8L124.7,463.8L123.4,462.9L122.6,461.5L121.5,460.8L123,459.4L123.4,457.2L125.7,457.8L128.6,457.7L130.7,456.5L131.7,455.5L132.8,451.9L134.8,449.5L136.1,448.6L137.5,449L138.8,448.6L141.9,445.9L143.1,445.4L143.6,446L145.9,445.9L147.2,445.1L149,442.8L149.7,442.8L152,443.8L152.1,444.4L150.9,445.2L151.7,446.2L153.2,443.9L154.2,444.8L154.3,446.2L155.3,446.6L156,445.8L157.6,445.5L160.1,446.2L159.6,447.7L161.4,448.1L161,449L162.9,449.3L164.4,448.5L164.8,449L167,448L169.9,449.4L170.2,449L171.6,450L176.2,449.7L178.7,450.9L181.9,449L182.7,448.9L187.8,451.3L189,451.4L202.2,518.1L204,518.4L204.1,517.7L206,518.3L206.8,516.9L208.9,516.3L208.9,518.3L211,519.2L211.8,520.3L216.1,523L217.2,525.2L219,522.9L219.9,522.6L219.9,519.3L222.6,517L224.6,518.2L225.4,520.1L226.4,520.1L228.9,522.3L230.6,522.8L233,524.4L234.3,526L239.9,531.4L239.7,532.4L241,532.3L241.2,533.6L242.3,533.8L242.9,535.1L243.9,534.7L246.2,535.4L250.7,536.1L251.4,536.8L251.4,538.5L253.3,541.6L252.8,544.6L251.9,546.5L250.7,546.1L249.2,543.8L249.6,542.8L248.9,540.9L248.9,543.9L247.8,543.9L245.6,543L245.2,539.8L245,542.9L243.6,541.8L243.3,539.9L242.6,541L241.7,539.7L240.7,539.6L240.9,537.8L241.6,537.6L239.8,535L237.5,533.6L235.2,533.2L235,531.9L233.2,529.2L230.7,526.8L228.8,527L225.7,523.4L223.9,520.5L223.1,520.9L224.4,521.9L226.2,525L227.4,527.9L225.5,526.8L223.8,527.4L223.4,525.8L222.3,524.6L221.9,525.2L219.2,524.3L222.1,525.7L223.3,527.6L221.6,529.3L216.9,527.5L215.5,525.9L213.9,524.9L207.5,522.8L208.3,522.1L207.7,520.2L205.6,522L203.4,522.1L200.6,521L195.7,520.9L191.2,522.3L190.6,521.2L188.4,521.1L188.5,519.4L187.1,520.6L185.3,519.6L182,521.4L182.7,520L184.9,518.8L182.5,518.4L181.3,516.5L180.5,516.8L180,515.5L179.1,517.3L178.5,516L177.9,517.9L176.4,518L177.5,515.3L176.2,516.2L175.7,518.5L176.6,518.6L177.4,520.7L176.9,522.3L178.1,523.5L176.6,524.5L172.8,524.5L172.3,523.5L171.7,526.3L170.6,526.9L169.2,528.8L169.3,527.6L167.8,528.8L166.9,530.4L165.4,530L164.7,530.9L163.2,530.3L163.5,529L165.7,527.7L166.8,526.3L164.9,527.4L163.5,526.4L164.1,524.6L165,523.2L165.5,520.8L164.9,519.5L166.3,518.9L168.5,517L169.9,518.2L170.7,517L169.8,515.4L167.4,515.2L165.7,517.1L164.6,517.4L163.4,519.4L161.8,521.1L162.1,522L160.9,523.2L160.9,524.4L159.2,527.2L157.7,527.5L156.8,528.9L155.3,529.6L154.8,531.2L158,532.5L158,534.1L156.1,535.2L154.9,538.6L151.9,539.4L151.5,540.5L149.7,541.1L149,542.8L147.8,542.6L145.7,544.6L146.5,545.4L145.6,546.8L144.2,546.9L143,548.3L142.3,547.6L140.1,549.5L140.2,550.3L138.3,550.1L137.6,551.1L139.1,552L137.4,553.7L133.3,554.3L132,554.2L128.8,556.7L127.5,556.2L125.8,557.2L124.7,557.1L125.5,555.3L124.5,555.3L122.6,558.7L118,559.3L115.4,561.4L112.6,561.2L112,562L109.9,562L109.8,560.6L110.7,560.3L112.2,558.5L116,558.3L116.8,559.6L117,557.8L118.9,557.7L121.9,554.4L123.9,553.1L128,552.6L128,553.6L130.3,554.2L128.9,553L130.1,550.9L132.4,549.2L136,547.2L137.1,547.7L137.4,546L138.4,544.6L141.4,542.4L142.6,535.5L144.1,534.1L144,532.9L140.1,534.6L138.6,533.1L138.9,531.7L137.4,533.8L137.9,535.4L136.5,535.8L135.5,533.4L134.3,531.8L133.5,532.9L132.1,531.5L132.2,530.6L128.1,532.6L126.4,533.8L125.8,533L126.6,530.8L125.9,528.5L127.4,527L125.6,521.8L124.9,523L122.7,523.7L120.5,523.9L118.9,523.3L118.9,521.9L117.4,519.7L116,518.4L116.7,518L115.1,517.4L116.9,516.4L116.5,514.7L117.4,514.2L116.4,512.9L115.4,513.4L115.4,512L113.9,510L115.2,509.1L114.5,507.9L116,507.9L116.3,505.8L119.7,502.3L120.9,499.5L123,498.6L125.1,500.5L126,500.5L128.9,497.7L131.1,498.3L132.6,498L134,496.2L133.7,492.8L132.7,490.5L133.8,490.8L134.6,489.3L133.5,487.7L132.9,488.7L132,488.5L129,490.1L128.1,491.5L128,490.2L125.8,489.4L123.2,489.1L121.2,489.6L117.7,487.9L117.1,486.7L117.5,485.6L116.4,483.5L117.2,483.9L117.9,482.4L115.3,481.4L113.6,479.7ZM89.8,569.5L91.6,567.6L93.3,566.9L93.8,565.9L95.4,565.6L95.8,567L93.8,567.6L92.5,568.9ZM88.7,570L88.7,570L88.7,570ZM86.9,568L86.9,568L86.9,568ZM93.1,542.2L93.1,542.2L93.1,542.2ZM87.1,567.3L87.1,567.3L87.1,567.3ZM85.7,568.7L85.7,568.7L85.7,568.7ZM85.3,568.2L85.3,568.2L85.3,568.2ZM84.7,569.4L84.7,569.4L84.7,569.4ZM91.6,537.7L91.6,537.7L91.6,537.7ZM81.7,569.5L81.7,569.5L81.7,569.5ZM80.3,569.3L80.3,569.3L80.3,569.3ZM79.4,569.7L79.4,569.7L79.4,569.7ZM98.6,491.2L99.3,489.7L99.6,490.5L101.6,491.9L103.1,491.3L104.2,492.2L104.1,493.1L105.5,494.3L108.1,495.5L107.3,496.5L105.7,496L104.5,497.4L102.7,494.3L100.7,492.7L99.3,493.3L98.6,492.6ZM73.4,569.5L73.4,569.5L73.4,569.5ZM88.5,511.5L91,513.7L89.3,512.9ZM88.8,510.1L88.8,510.1L88.8,510.1ZM66.9,568.9L68.9,569.3L71.5,570.5L69.1,570.3ZM61.2,567.8L66,567.9L66.9,566.7L67.5,567.8L63.7,568.8ZM60.3,567.9L60.3,567.9L60.3,567.9ZM60.7,566.4L60.7,566.4L60.7,566.4ZM59.3,567.6L59.3,567.6L59.3,567.6ZM58.4,567.2L58.4,567.2L58.4,567.2ZM57.6,566.2L57.6,566.2L57.6,566.2ZM56.8,567.9L56.8,567.9L56.8,567.9ZM53.1,568.1L54.9,566.1L55.4,567.2L56.7,567.5L53.9,568.5ZM51.8,565.4L51.8,565.4L51.8,565.4ZM50.3,566.4L53.6,566.2L52.7,567.3ZM48.5,564.4L49.8,564.6L49.3,565.9ZM45.9,565.5L45.9,565.5L45.9,565.5ZM45.1,565.4L45.1,565.4L45.1,565.4ZM45.6,563.9L45.6,563.9L45.6,563.9ZM43.9,566.5L43.9,566.5L43.9,566.5ZM43.1,566.9L43.1,566.9L43.1,566.9ZM39.2,559.9L39.2,559.9L39.2,559.9ZM34.6,560.6L34.6,560.6L34.6,560.6ZM34.9,558L34.9,558L34.9,558ZM33.6,558.7L33.6,558.7L33.6,558.7ZM33.6,557L33.6,557L33.6,557ZM29.5,556.3L29.5,556.3L29.5,556.3ZM25.6,550.6L25.6,550.6L25.6,550.6ZM19.6,544.6L19.6,544.6L19.6,544.6ZM19.2,544.3L19.2,544.3L19.2,544.3ZM18.9,543.9L18.9,543.9L18.9,543.9ZM15.7,545.3L17.1,545.2L17,546.3ZM14,540L16.7,541L17.4,542.7L14.9,541.6ZM248.9,544.7L248.9,544.7L248.9,544.7ZM248.3,546L248.3,546L248.3,546ZM247.7,546.2L247.7,546.2L247.7,546.2ZM247.4,545.7L247.2,543.8L248.5,545.5ZM245.7,543.7L246.8,543.8L246.8,545.2ZM240.7,536.6L240.7,536.6L240.7,536.6ZM240.7,537.6L240.7,537.6L240.7,537.6ZM240.1,537L240.1,537L240.1,537ZM242.6,547.7L242.6,547.7L242.6,547.7ZM239.2,539.2L239.2,539.2L239.2,539.2ZM238.8,538.4L240.4,537.6L239.8,539ZM239.9,545.2L239.9,545.2L239.9,545.2ZM240.2,549.3L240.2,549.3L240.2,549.3ZM238.1,544.2L238.1,544.2L238.1,544.2ZM237.8,543.9L237.8,543.9L237.8,543.9ZM238,545.5L239.2,544.3L239.6,545.6L238.7,546.5ZM236.8,542L237.4,540.4L236.8,539L238.5,538.8L240.2,540.5L241.5,540.8L242.7,542.3L244.5,543.4L242.7,543.1L245.8,545.1L246.7,548.5L244.6,548.6L245.1,547.9L243.1,547.4L241.1,546.1L242.8,548.3L243.3,547.8L244.2,549.5L243.3,549.6L241.6,548.2L240.7,546.4L240.9,545L237.6,543.2ZM233.6,532.8L233.6,532.8L233.6,532.8ZM236.4,542.6L236.4,542.6L236.4,542.6ZM234.7,543.1L234.7,543.1L234.7,543.1ZM232.6,536.6L232.9,535.8L234.7,536L233.6,534.9L234,534.2L237.2,533.9L240.3,536.1L236.3,538.5L235.9,537.8L235.9,541.3L234.7,541.5ZM227.3,526.3L229.2,527.3L230.7,527.1L232.7,530.1L231.1,529L233.3,531.6L233.3,532.9L231.9,535.4L230.9,534.2L231.2,532.8ZM226.8,525.5L226.8,525.5L226.8,525.5ZM224.6,522.4L224.6,522.4L224.6,522.4ZM226.7,534.4L227.3,532.7L229.7,533.1L232,537.7L233,541.6L229.3,538.3L228.5,538.3L228.2,534.9ZM224.5,527.4L224.5,527.4L224.5,527.4ZM226.3,535.4L227.5,535.3L227.6,536.8L226.8,537.2ZM222.5,526.2L222.5,526.2L222.5,526.2ZM223.1,528.4L223.1,528.4L223.1,528.4ZM222.3,531.3L222,530.3L224.5,528L226,528.7L228,528.8L228.2,530L229.7,532.5L228.7,533L226.5,532.1L226.6,534.4L224.2,533.3ZM185.6,520.4L185.6,520.4L185.6,520.4ZM184.3,520.3L184.3,520.3L184.3,520.3ZM179.3,517.3L179.3,517.3L179.3,517.3ZM178.8,519L178.8,519L178.8,519ZM179.1,521.9L179.1,521.9L179.1,521.9ZM177.9,525.5L179.6,522.9L180.5,520.9L181.1,521.7L179.4,524.3ZM177.5,522.2L178.7,519.6L178.3,522.7ZM177,518.7L177,518.7L177,518.7Z","Arizona":"M200.2,389.5L203.7,389.4L204.9,383.8L201.9,381.9L202.9,375.4L208,370.2L210.6,362.3L216.3,359.7L213.7,355.1L211,342.8L213.5,320L220,320.1L223.1,323.3L225.5,320.1L228.6,303.4L310,316.9L293.7,434.7L258.1,429.4L197.7,393.8Z","Colorado":"M321.5,233.5L398.9,242.1L430,244.4L428.7,265.4L424.8,328.6L409.1,327.3L345.6,321.5L310,316.9Z","Florida":"M815.1,561.6L815.1,561.6L815.1,561.6ZM813.4,563L813.4,563L813.4,563ZM808.6,565.8L808.6,565.8L808.6,565.8ZM795.9,570.7L802.2,564.6L806.4,566.9ZM792.2,571.7L792.2,571.7L792.2,571.7ZM789.3,571.8L789.3,571.8L789.3,571.8ZM781,528.5L781,528.5L781,528.5ZM774.5,572.4L774.5,572.4L774.5,572.4ZM728.7,470.5L728.7,470.5L728.7,470.5ZM719.8,446.2L722.9,451.9L770.3,448.7L774,452.3L774.2,442.6L783.5,443.7L789.6,461.7L797.6,475.3L806,485L807.8,495L820.1,515.6L822.7,524.1L823.5,542.6L821.8,542.4L819.9,554L808.1,557.3L802.3,546.4L794.3,544.2L789.3,533.9L781.1,527.1L770.6,513.2L775.2,505.5L769.3,502.3L771.8,506.4L766.8,506.1L765.6,498.8L768.4,493.7L766.8,484.2L764,479.5L760.4,479.4L752.2,473.4L747,466.3L739.4,462.7L735.1,463.4L722.4,475.6L716.7,474.7L716,469.8L705.2,463.9L692.2,461.9L676.5,465.8L679,462.3L673.8,451Z","Georgia":"M700,364.4L721.6,361.8L741.9,358.9L738.9,366L747.3,369.3L754.3,379.6L766.8,388.4L770.6,394.2L775.4,396.3L778,404.2L780.5,405.1L784.8,413.8L789,414.8L785.7,421.9L784.6,433.1L782.9,434.8L783.5,443.7L774.2,442.6L774,452.3L770.3,448.7L722.9,451.9L719.8,446.2L717.5,442.6L717.8,435.6L715.3,429.1L718.6,419.7L712.1,407.7Z","Indiana":"M655.1,226.7L659.9,228.1L665.7,224.7L696.7,221.3L696.9,222.7L703,276.8L704,283.3L693.9,286.2L694.9,289.7L688.8,295.9L687.9,301.3L682.3,301.3L678.6,304.3L673.9,303.5L668.9,308.3L660.8,305.1L654.2,309.3L652.9,307.3L661.1,288.8L658,280.1L659.4,276.2Z","Kansas":"M428.7,265.4L535.3,268.4L542.2,272L538.6,278.2L543,284.8L546.7,286.8L547.1,331.5L455.2,330L424.8,328.6Z","Maine":"M930.1,121.1L930.1,121.1L930.1,121.1ZM928.5,122.3L928.5,122.3L928.5,122.3ZM926.9,118.8L926.9,118.8L926.9,118.8ZM923.1,122.2L923.1,122.2L923.1,122.2ZM924.4,130.2L924.4,130.2L924.4,130.2ZM922.4,125.2L922.4,125.2L922.4,125.2ZM921.3,122.5L921.3,122.5L921.3,122.5ZM902.9,153.6L897,148.2L896.2,144.3L885.2,109.7L888.8,110.4L889.2,104.1L893.6,94.8L891.9,85.7L892.8,77.7L899,59.4L901.7,59.3L905,63.7L913.1,57.5L920.9,61.3L929.1,89L934.5,89L936,95.6L941.3,96.5L946,102.7L942,106.2L939.7,112.6L936.5,111.4L933.9,117L927.6,120.4L927.9,125.7L922.9,120.7L922.1,116.8L919.6,130.3L910.2,135.9L905.4,142.5Z","Massachusetts":"M919,187.2L919,187.2L919,187.2ZM910.4,188.6L913.1,185.1L916.1,187.2ZM867,169.6L878.9,167.1L896.3,163.2L902.3,157.8L906.7,161.2L902.3,167.9L909.2,172.9L912.2,178.1L922,178L912,184.1L911.5,180.5L905.3,186.9L903.2,183.5L902.6,182.9L898.6,177.3L892.5,179.2L867.1,184.6Z","Minnesota":"M507.4,80.6L536.1,80.7L536,72.7L540.6,74.5L543.3,85.9L554.5,88.1L555.1,90.3L561.3,87.9L566.3,87.8L573.1,91.2L575.2,95.8L576.6,93L584.4,95.9L586.6,99L596,94.3L597.9,97.3L606.7,96.5L614.6,98.4L609.3,102.1L601.5,105.3L593.5,112L588.8,117.9L580.3,125.3L581.5,126.9L577.6,128L578,140.2L572.1,144.2L569.8,150.8L573.4,153.6L571.8,156.8L571.5,167.7L575.6,171.8L584.9,176.3L585.7,179L595,186.2L596.3,193.2L517.5,195L517.7,157.3L511.8,151L516.2,144.1L515.7,135.9L512.9,128.9L512.3,109.3L508.5,98.3L509.1,87.1Z","New Jersey":"M846.9,241.4L847.4,240.1L848.3,237.4L857.5,227.8L851.1,223.6L847.6,218.4L847.3,212.4L852.2,203L865.9,207.6L865.3,214.4L865,215.1L862.9,219L868,220.7L869,233.6L866.8,241.2L859.2,253.6L859.6,248.8L848,244.8L847.1,241.9Z","North Carolina":"M860.8,318L860.8,318L860.8,318ZM859.9,336.8L859.9,336.8L859.9,336.8ZM760.9,322.4L783.7,319.7L855.8,305.8L853.1,307.3L856.2,312.3L845.3,321.3L859.3,317.8L861.5,325.5L856.6,331.9L841.3,331.1L851.5,334.4L848.1,342.5L852.9,338.5L856,340.5L853.3,348.5L850.5,346.8L844.7,348.7L837,355.5L833.4,361.6L832.4,368.4L822.7,370.3L800.1,354L781.2,356.9L776,350.7L755,352.8L741.9,358.9L721.6,361.8L721.5,356.8L725.8,354.6L729.2,348.6L734,347.9L753.4,332.6L756.5,332.8Z","North Dakota":"M413.1,76L507.4,80.6L509.1,87.1L508.5,98.3L512.3,109.3L512.9,128.9L515.7,135.9L516.2,144.1L407.8,139Z","Oklahoma":"M409.1,327.3L424.8,328.6L455.2,330L547.1,331.5L547.3,342L550.8,365.2L550.4,402.1L543.8,399.9L537.6,395.4L527.2,398.1L521.8,398.1L518.8,401.1L508.8,395.7L504.3,400.2L503.6,396.3L499.6,398.2L495.4,394.7L491,394.6L483.9,390.9L481.8,392.8L469.6,386.7L461.1,385.3L456.3,381.5L458,340.7L408.3,337.8Z","Pennsylvania":"M761.4,207.6L771.9,199.6L772.9,205.2L839.3,192.1L843.7,194.6L845.3,199.3L852.2,203L847.3,212.4L847.6,218.4L851.1,223.6L857.5,227.8L848.3,237.4L842.9,240.3L785.5,251.6L769.1,254.4L766,235.3Z","South Dakota":"M405.9,158.7L407.8,139L516.2,144.1L511.8,151L517.7,157.3L517.5,195L514.8,211.6L517.6,216.1L513.9,212.7L504.5,208.1L496.3,208L493.7,210.1L486.5,205L402.5,200.3Z","Texas":"M408.3,337.8L458,340.7L456.3,381.5L461.1,385.3L469.6,386.7L481.8,392.8L483.9,390.9L491,394.6L495.4,394.7L499.6,398.2L503.6,396.3L504.3,400.2L508.8,395.7L518.8,401.1L521.8,398.1L527.2,398.1L537.6,395.4L543.8,399.9L550.4,402.1L558.1,403.7L558.1,403.7L558.4,414.9L558.8,436.4L568.2,453.1L568,460.6L564.5,471L565.8,476.6L561.9,481.8L563.5,484.4L558.1,485.5L546.5,491.3L548,483.3L542.3,485.4L544.5,492.7L547.4,492.2L535.6,502L520.3,509.8L505.8,521.9L507.4,518L516.3,512.9L509.8,512L509.6,515.3L502,518.3L505.5,519.1L498.1,533.9L496.9,544.5L497.8,551.3L502.7,562.3L498.4,564.6L490.4,559.9L482.9,559.8L477.9,556.3L465.8,551.5L463.2,543L460,539.1L459.7,529.4L452.6,522.8L451.8,518.9L445.4,512.4L439.2,495.1L425.5,480.1L415.1,479.4L410.7,477.2L404.3,479.8L399.1,490.4L394.6,494.7L376.6,484.9L370.5,479.1L368,472.9L368,466.3L363.6,456.5L357,452.3L348.2,440.7L344,438.1L339.1,430.9L338,426.2L400.2,432L403.6,391.3L407.6,337.8Z","Wyoming":"M405.9,158.7L402.5,200.3L398.9,242.1L321.5,233.5L290.6,229L294,208.1L302.1,157L303.7,146.1Z","Connecticut":"M867.1,184.6L892.5,179.2L895.2,193.4L880,198.9L869.7,207L869.8,200.2Z","Missouri":"M528.1,256.2L546.4,256.3L591.3,254.1L596.4,258.8L595.6,266L597.8,272.3L608.7,282.3L610,288.6L618.9,289.8L615.8,303.3L630.2,313.4L630.7,322L634.8,327.9L637.5,327.9L637.5,334.5L633.5,338.4L632.4,338.5L631.5,338.5L631.9,343.2L629,349.2L618.3,350L622.8,343.9L621.4,339.2L547.3,342L547.1,331.5L546.7,286.8L543,284.8L538.6,278.2L542.2,272L535.3,268.4Z","West Virginia":"M740.4,286.4L744.7,285.2L745.3,277.8L747.6,272.5L750.3,275.4L751.4,268.7L755.3,263.3L759.4,262.9L764.3,255.3L765.8,242.1L763.9,237.1L766,235.3L769.1,254.4L785.5,251.6L787.2,262.3L796.7,251.7L802,253L805.8,248.4L810.9,250.4L814.5,254.8L813.6,259L804.1,253.7L804.4,260L798.6,269.7L796.3,268.3L792.9,278.3L786.8,275.5L786.8,278.9L779.7,295.9L780.3,299.7L766.2,307.8L763.6,306L758.9,309.7L753.2,303.4L747.5,301.4L740.5,292.4Z","Illinois":"M596.4,258.8L597.1,254.1L600.8,252.4L603,243.3L601.2,236.7L611.9,232.4L614.1,227.7L613.9,221.2L606.1,213.5L649.4,210.7L649.2,214.8L655.1,226.7L659.4,276.2L658,280.1L661.1,288.8L652.9,307.3L654.2,309.3L653.9,316.3L647.6,318.6L648.4,325.1L640.7,322.5L637.5,327.9L634.8,327.9L630.7,322L630.2,313.4L615.8,303.3L618.9,289.8L610,288.6L608.7,282.3L597.8,272.3L595.6,266Z","New Mexico":"M310,316.9L345.6,321.5L409.1,327.3L408.3,337.8L407.6,337.8L403.6,391.3L400.2,432L338,426.2L339.1,430.9L309.7,427.3L308.4,436.7L293.7,434.7Z","Arkansas":"M547.3,342L621.4,339.2L622.8,343.9L618.3,350L629,349.2L630.4,351.5L625.6,355.2L627.5,356.9L622.5,361.8L624.6,367.6L620.7,370.9L617.4,375.1L617,383.1L613.9,384.5L612.2,390.7L608.6,393.4L610.5,396.8L606.6,401.8L608.5,403.6L608.3,413.4L558.4,414.9L558.1,403.7L558.1,403.7L550.4,402.1L550.8,365.2Z","California":"M137.9,359.4L137.9,359.4L137.9,359.4ZM135.6,368.6L135.6,368.6L135.6,368.6ZM130.3,357.3L130.3,357.3L130.3,357.3ZM126.8,344.8L126.8,344.8L126.8,344.8ZM120.5,359.4L120.5,359.4L120.5,359.4ZM118.9,341.8L118.9,341.8L118.9,341.8ZM113.1,341.9L113.1,341.9L113.1,341.9ZM110,340.3L110,340.3L110,340.3ZM96.9,162.6L112.6,167L159.2,180.2L159.2,180.2L143.5,241.2L169.9,280.9L189.8,311L211,342.8L213.7,355.1L216.3,359.7L210.6,362.3L208,370.2L202.9,375.4L201.9,381.9L204.9,383.8L203.7,389.4L200.2,389.5L158.3,384.6L156.9,381.4L157.6,371.8L155.6,366.8L146.4,355.3L142.3,354.8L141.6,348.3L137.1,348L131,343.3L126.7,336.5L111.7,331.8L109.6,328.4L112.7,317.4L105.6,303.9L99.1,284.1L103.4,278.3L95.8,267.6L97.5,255.2L102.3,263.8L99.9,251.9L97.5,254.4L91,248.5L93.2,243.7L85.4,226L89,207.8L83.9,196.8L84.3,193L90.3,185.9L95.7,174.5Z","Delaware":"M846.9,241.4L847.1,241.9L846.9,241.4ZM842.9,240.3L848.3,237.4L847.4,240.1L847.2,245L851.9,252.5L857.9,256.8L860.2,263.9L850,266Z","District of Columbia":"M825.5,260.9L827.4,263.6L825.5,260.9Z","Hawaii":"M347.5,552.5L352,546.6L351,541.6L362.7,546.6L372.1,557L368.7,560.6L358.2,565.1L355.1,569.6L350.9,567.1L350.8,560.7ZM334.8,528.1L342.2,527.5L348.4,530.7L347.3,533.6L339.9,534.7ZM334.7,536.2L334.7,536.2L334.7,536.2ZM327.7,528.4L327.7,528.4L327.7,528.4ZM322.9,524.4L323.8,521.9L334.6,523.2L331.4,525.4ZM303.9,514.4L310.1,511.7L316.2,520.3L307.1,520.2ZM274.6,504.9L278.6,500.9L284.2,503.4L283.2,506.9L278.1,507.7ZM265.6,508.5L265.6,508.5L265.6,508.5Z","Iowa":"M517.5,195L596.3,193.2L599,198.3L597.3,200.9L599.6,209L606.1,213.5L613.9,221.2L614.1,227.7L611.9,232.4L601.2,236.7L603,243.3L600.8,252.4L597.1,254.1L596.4,258.8L591.3,254.1L546.4,256.3L528.1,256.2L525.4,237.7L523,236.3L523.4,230.6L520.2,225.5L517.6,216.1L514.8,211.6Z","Kentucky":"M637.5,327.9L640.7,322.5L648.4,325.1L647.6,318.6L653.9,316.3L654.2,309.3L660.8,305.1L668.9,308.3L673.9,303.5L678.6,304.3L682.3,301.3L687.9,301.3L688.8,295.9L694.9,289.7L693.9,286.2L704,283.3L703,276.8L709,275.9L713.4,281.9L722.7,284.5L728.5,284.3L734.7,280.1L740.4,286.4L740.5,292.4L747.5,301.4L753.2,303.4L747.7,310L742.2,313.9L736.5,322.6L728,326.8L698.2,330.1L679.9,331.2L659.1,333.5L656.1,336.7L633.5,338.4L637.5,334.5ZM632.4,338.5L631.5,338.5L632.4,338.5Z","Maryland":"M847.5,277.4L846.7,277.6L847.5,277.4ZM845.2,274.2L845.2,274.2L845.2,274.2ZM837.6,261.9L837.6,261.9L837.6,261.9ZM785.5,251.6L842.9,240.3L850,266L860.2,263.9L859.2,273.3L852.7,276.3L849.3,277.8L848.7,271.6L843.5,272L839.8,267.5L844.3,264.9L837.6,260.2L838.5,249.9L835,253.3L836.7,267.1L839.5,274.6L833.5,274.2L829.2,270.6L826.5,273L826.6,267.1L827.4,263.6L825.5,260.9L818.5,258.3L814.5,254.8L810.9,250.4L805.8,248.4L802,253L796.7,251.7L787.2,262.3Z","Michigan":"M688.8,135.8L688.8,135.8L688.8,135.8ZM678.3,138.8L678.3,138.8L678.3,138.8ZM676.3,138L676.3,138L676.3,138ZM675.3,142.9L675.3,142.9L675.3,142.9ZM674,140.2L674,140.2L674,140.2ZM672,146.5L672,146.5L672,146.5ZM670,153.1L670,153.1L670,153.1ZM669,155.9L669,155.9L669,155.9ZM659.9,144.1L659.9,144.1L659.9,144.1ZM665.7,224.7L668.6,221.6L672.9,209.5L672.1,197.6L666.1,184.6L665.7,176.5L668.8,169.9L668.2,162.7L674.2,156.6L676.4,151.4L677.7,160.2L680.3,156.4L679.9,149.3L686.1,146L682.8,142.6L687.3,137.6L695.7,139.8L698.4,142.5L706.9,144.2L711.1,150.6L708.9,152.7L711.9,157L712.1,164.9L709.2,171.3L705.7,173.2L704.4,178.3L708.9,181.1L714.1,172.4L719,169.6L723.7,173.6L729.4,190.6L729.1,199.2L724.6,199.4L720.7,213.1L717.5,219.3L696.9,222.7L696.7,221.3ZM619.3,100.5L627.3,94.5L627.3,97.1L621.2,101.4ZM604.6,128.7L613.2,122.9L618.2,122.1L635.1,108L641.8,108.6L634.8,113.4L632.2,118.3L632.4,122.7L635.1,119L643.4,120.2L648,126.3L659.7,126.5L665.6,121.5L675,120.3L682.4,117.6L682,123.7L688.3,124.3L693.3,121.2L696.6,130L699.7,131.8L703.6,129.2L704.4,132.8L696.3,132.5L692.6,133.9L688.3,131.9L686.2,136L683.3,133.4L675.9,132.5L674,135.3L666.3,136.3L664.3,140.1L659.4,143.1L661.8,139L654.7,140L647.8,156.2L643.6,151.4L643.6,151.4L644,144.4L638.5,141.9L638.9,139.7L628.9,138.5L624.2,136.3L609.1,133.2L605.5,129.2L605.5,129.2Z","Mississippi":"M658.9,468.6L658.9,468.6L658.9,468.6ZM654.2,468.4L654.2,468.4L654.2,468.4ZM650.3,469.3L650.3,469.3L650.3,469.3ZM647.2,469L647.2,469L647.2,469ZM608.3,413.4L608.5,403.6L606.6,401.8L610.5,396.8L608.6,393.4L612.2,390.7L613.9,384.5L617,383.1L617.4,375.1L620.7,370.9L656.2,368.3L658.2,370.4L656.8,433.6L660.7,465.3L651.7,465.4L640.7,470.7L634.2,461.1L635.6,453.8L602,455.8L603.6,444.7L613.4,427.1L609.8,424.5L610.1,415.8Z","Montana":"M248.9,51.5L413.1,76L407.8,139L405.9,158.7L303.7,146.1L302.1,157L298.1,150.4L296.1,154.6L284.3,152L282.4,154.3L273.4,152.6L272.7,145.6L268.4,142.9L269.2,138.9L266.1,132.6L266.2,126.8L264,124.3L257.9,128.3L255.4,125.6L256,121.2L262.8,104.8L255.1,98L251.4,88.9L246.6,84.3L247.7,78.8L244.5,72.2Z","New Hampshire":"M880.9,117.2L881.4,112.1L885.2,109.7L896.2,144.3L897,148.2L902.9,153.6L902.3,157.8L896.3,163.2L878.9,167.1L875.7,149.6L878.1,137.8L876.9,133.2L882.5,127.8L880.5,123Z","New York":"M892.9,195.4L892.9,195.4L892.9,195.4ZM892.1,199L892.1,199L892.1,199ZM890.6,197.5L890.6,197.5L890.6,197.5ZM865,215.1L862.9,219L865,215.1ZM816,157L816,157L816,157ZM814.7,156.9L814.7,156.9L814.7,156.9ZM771.9,199.6L780.1,192.1L783.7,186.6L778.6,177.3L786.8,173.4L798.5,172.3L801.5,173.6L810,171.1L816.8,164.3L819.5,163.6L819.2,155L815.3,153.7L815.5,150.1L820.6,145.4L827.2,134L833.3,128.8L854.6,123.9L855.8,131.6L858.2,135.3L858,143.8L863.2,153.1L867,169.6L867.1,184.6L869.8,200.2L869.7,207L885.3,203.2L888.7,199L893.2,201L878.3,212.6L867.6,217L865.3,214.4L865.9,207.6L852.2,203L845.3,199.3L843.7,194.6L839.3,192.1L772.9,205.2Z","Ohio":"M728.8,220.5L728.8,220.5L728.8,220.5ZM727.1,219.8L727.1,219.8L727.1,219.8ZM696.9,222.7L717.5,219.3L726.1,222.8L727.4,221L733.4,224.5L740.2,220.7L744.5,220.7L754.4,211.3L761.4,207.6L766,235.3L763.9,237.1L765.8,242.1L764.3,255.3L759.4,262.9L755.3,263.3L751.4,268.7L750.3,275.4L747.6,272.5L745.3,277.8L744.7,285.2L740.4,286.4L734.7,280.1L728.5,284.3L722.7,284.5L713.4,281.9L709,275.9L703,276.8Z","Oregon":"M132.1,80.2L137.7,83.4L140.6,89.1L139.5,95.4L145.8,99.7L157.2,98.9L161.4,102.6L170.9,102.3L192.1,103.6L194.4,102.7L223.6,109.7L228.2,119.1L220.1,129.7L217.9,134.2L212.2,139.4L211.4,143.4L215.5,146.7L212,153.9L203.7,190.8L159.2,180.2L159.2,180.2L159.2,180.2L112.6,167L96.9,162.6L95.5,160.1L97.8,150.4L97.1,144.2L107.3,129.2L119.5,100.6L126.6,80.5Z","Tennessee":"M629,349.2L631.9,343.2L631.5,338.5L632.4,338.5L633.5,338.4L656.1,336.7L659.1,333.5L679.9,331.2L698.2,330.1L728,326.8L760.9,322.4L756.5,332.8L753.4,332.6L734,347.9L729.2,348.6L725.8,354.6L721.5,356.8L721.6,361.8L700,364.4L656.2,368.3L620.7,370.9L624.6,367.6L622.5,361.8L627.5,356.9L625.6,355.2L630.4,351.5Z","Utah":"M248.6,200.3L294,208.1L290.6,229L321.5,233.5L310,316.9L228.6,303.4Z","Virginia":"M847.9,279.6L847.9,279.6L847.9,279.6ZM852.7,276.3L859.2,273.3L855.3,280.4L853.5,292.9L850.1,291.8L850.2,284.4ZM847.5,277.4L846.7,277.6L847.5,277.4ZM753.2,303.4L758.9,309.7L763.6,306L766.2,307.8L780.3,299.7L779.7,295.9L786.8,278.9L786.8,275.5L792.9,278.3L796.3,268.3L798.6,269.7L804.4,260L804.1,253.7L813.6,259L814.5,254.8L818.5,258.3L825.5,260.9L827.4,263.6L826.6,267.1L825.7,273.8L829.6,272.1L831,275.2L836.8,275.5L844,279.5L843.2,290.2L846.9,296.2L844.3,300.8L852,298.6L855.8,305.8L783.7,319.7L760.9,322.4L728,326.8L736.5,322.6L742.2,313.9L747.7,310Z","Washington":"M152.6,62.4L152.6,62.4L152.6,62.4ZM157.7,38.2L157.7,38.2L157.7,38.2ZM157.7,34.3L157.7,34.3L157.7,34.3ZM156.7,37.2L156.7,37.2L156.7,37.2ZM154.2,44.2L158.4,49.5L157,51.7ZM154.7,32.1L154.7,32.1L154.7,32.1ZM152.9,33.6L152.9,33.6L152.9,33.6ZM154.4,27.6L154.4,27.6L154.4,27.6ZM150.5,35.2L157.1,35.6L154.9,40ZM150.6,33.2L150.6,33.2L150.6,33.2ZM235.6,48.6L223.7,100.9L223.6,109.7L194.4,102.7L192.1,103.6L170.9,102.3L161.4,102.6L157.2,98.9L145.8,99.7L139.5,95.4L140.6,89.1L137.7,83.4L132.1,80.2L124.8,77.8L130.9,69.9L127.5,68.2L128.4,62.5L128.6,45.4L127.5,37.5L129.9,33.3L137.6,40.6L149.8,46L153.9,45.9L153.9,51L147.9,56.1L155.7,51.5L155.4,54.9L150.7,64.9L155.2,63.4L156.9,54L160.4,50.2L157.6,44.6L159.9,44.5L161,34.9L158.2,33.2L158.8,28.8Z","Wisconsin":"M656.6,150L656.6,150L656.6,150ZM650.7,153.8L650.7,153.8L650.7,153.8ZM603.3,119.7L603.3,119.7L603.3,119.7ZM602.7,122.3L602.7,122.3L602.7,122.3ZM600.8,121.4L600.8,121.4L600.8,121.4ZM599.3,123.3L599.3,123.3L599.3,123.3ZM599.5,120.7L599.5,120.7L599.5,120.7ZM598.9,119.5L598.9,119.5L598.9,119.5ZM598.9,124.4L598.9,124.4L598.9,124.4ZM596,120.4L596,120.4L596,120.4ZM581.5,126.9L588.7,125.5L596.2,121.3L599.4,122.3L596.9,128.5L599.9,126.3L604.6,128.7L605.5,129.2L605.5,129.2L609.1,133.2L624.2,136.3L628.9,138.5L638.9,139.7L638.5,141.9L644,144.4L643.6,151.4L643.6,151.4L647.8,156.2L642.7,164.5L643.2,168.4L650.9,159.9L655.2,151.4L655.7,155.6L650.6,167.3L650.5,175.2L647.9,181.7L648.7,185.8L646.4,195.3L649.4,210.7L606.1,213.5L599.6,209L597.3,200.9L599,198.3L596.3,193.2L595,186.2L585.7,179L584.9,176.3L575.6,171.8L571.5,167.7L571.8,156.8L573.4,153.6L569.8,150.8L572.1,144.2L578,140.2L577.6,128Z","Nebraska":"M402.5,200.3L486.5,205L493.7,210.1L496.3,208L504.5,208.1L513.9,212.7L517.6,216.1L520.2,225.5L523.4,230.6L523,236.3L525.4,237.7L528.1,256.2L535.3,268.4L428.7,265.4L430,244.4L398.9,242.1Z","South Carolina":"M741.9,358.9L755,352.8L776,350.7L781.2,356.9L800.1,354L822.7,370.3L814.8,379.6L811.9,390.3L802.3,400.5L794.5,404.9L795.4,407.6L789,414.8L784.8,413.8L780.5,405.1L778,404.2L775.4,396.3L770.6,394.2L766.8,388.4L754.3,379.6L747.3,369.3L738.9,366Z","Idaho":"M223.6,109.7L223.7,100.9L235.6,48.6L248.9,51.5L244.5,72.2L247.7,78.8L246.6,84.3L251.4,88.9L255.1,98L262.8,104.8L256,121.2L255.4,125.6L257.9,128.3L264,124.3L266.2,126.8L266.1,132.6L269.2,138.9L268.4,142.9L272.7,145.6L273.4,152.6L282.4,154.3L284.3,152L296.1,154.6L298.1,150.4L302.1,157L294,208.1L248.6,200.3L203.7,190.8L212,153.9L215.5,146.7L211.4,143.4L212.2,139.4L217.9,134.2L220.1,129.7L228.2,119.1Z","Nevada":"M159.2,180.2L159.2,180.2L203.7,190.8L248.6,200.3L228.6,303.4L225.5,320.1L223.1,323.3L220,320.1L213.5,320L211,342.8L189.8,311L169.9,280.9L143.5,241.2Z","Vermont":"M854.6,123.9L880.9,117.2L880.5,123L882.5,127.8L876.9,133.2L878.1,137.8L875.7,149.6L878.9,167.1L867,169.6L863.2,153.1L858,143.8L858.2,135.3L855.8,131.6Z","Louisiana":"M652.5,472.5L652.5,472.5L652.5,472.5ZM644.2,473L644.2,473L644.2,473ZM639.8,484.2L639.8,484.2L639.8,484.2ZM626.8,494L626.8,494L626.8,494ZM623.5,494.5L623.5,494.5L623.5,494.5ZM620.1,495.5L620.1,495.5L620.1,495.5ZM596.5,485.4L596.5,485.4L596.5,485.4ZM558.4,414.9L608.3,413.4L610.1,415.8L609.8,424.5L613.4,427.1L603.6,444.7L602,455.8L635.6,453.8L634.2,461.1L640.7,470.7L635.7,473.9L638.8,477.5L641.7,472.7L644,476.1L643.2,481.5L639,482L642.2,487.2L647.8,487.6L649.4,494.9L636.2,489L629.6,494.3L625.5,489.1L619,495.8L609.2,491L603.5,482.1L598.6,480.2L591,486.9L575.4,482.4L563.5,484.4L561.9,481.8L565.8,476.6L564.5,471L568,460.6L568.2,453.1L558.8,436.4Z","Rhode Island":"M903.2,183.5L905.3,186.9L903.2,183.5ZM900.8,184.5L900.8,184.5L900.8,184.5ZM901.3,188.7L901.3,188.7L901.3,188.7ZM899.8,195.7L899.8,195.7L899.8,195.7ZM895.2,193.4L892.5,179.2L898.6,177.3L902.6,182.9L899.8,182.1L900.6,190.9Z"},"pts":{"c:city of industry,ca":[151.3,351],"c:modesto,ca":[120.6,264.7],"c:hanford,ca":[135.1,297.1],"c:earlimart,ca":[138.9,307.7],"c:watsonville,ca":[104.5,276.2],"c:lindsay,ca":[143.5,301.9],"c:st. louis,mo":[617.8,294.5],"c:saint louis,mo":[617.8,294.5],"c:council bluffs,ia":[526.5,241.9],"c:moses lake,wa":[196,78.9],"c:fairfield,nj":[860.4,211.4],"c:phoenix,az":[248.1,382.8],"c:pasadena,tx":[538.7,484.8],"c:plover,wi":[620.1,171.8],"c:north plains,or":[135.9,95.6],"c:north aurora,il":[642.6,225.8],"c:sugar city,id":[289.8,167.8],"c:los angeles,ca":[146.7,349.2],"c:commerce,ca":[147.8,350.7],"c:vernon,ca":[146.7,350.2],"c:humble,tx":[537.7,478.4],"c:houston,tx":[535.8,483.4],"c:sacramento,ca":[118,243.5],"c:fresno,ca":[135,287.9],"c:north york,on":[771.7,167.9],"s:al":[684.5,411.9],"s:ak":[160.9,498.5],"s:az":[258.1,366.6],"s:ar":[584.6,373.2],"s:ca":[133.5,301.2],"s:co":[375.4,280.9],"s:ct":[880.2,191.1],"s:de":[849.1,247.6],"s:fl":[788.3,504.9],"s:ga":[738.3,400.9],"s:hi":[319.1,524.6],"s:id":[251.1,152.9],"s:il":[634.6,257],"s:in":[678.5,263.7],"s:ia":[567.3,225.6],"s:ks":[512.6,299.4],"s:ky":[709,306.5],"s:la":[597.7,452.4],"s:me":[912.8,115.4],"s:md":[830,257.3],"s:ma":[895.3,173.6],"s:mi":[696.8,188.2],"s:mn":[555,148.9],"s:ms":[634.4,417.4],"s:mo":[584.3,299.7],"s:mt":[318.6,108],"s:ne":[489,244.3],"s:nv":[186.1,266.4],"s:nh":[888.3,149],"s:nj":[859.9,224.1],"s:nm":[350.9,367.7],"s:ny":[844.6,187.3],"s:nc":[794.8,337.3],"s:nd":[470.8,110],"s:oh":[732,245.8],"s:ok":[508.7,361.6],"s:or":[143.1,120],"s:pa":[817.3,227],"s:ri":[898.5,184.7],"s:sc":[781.8,377.2],"s:sd":[473.2,177.3],"s:tn":[680.2,350.3],"s:tx":[496.6,456.3],"s:ut":[275.2,244.5],"s:vt":[868.5,141.1],"s:va":[813.5,288.2],"s:wa":[167,65.5],"s:wv":[766.5,281],"s:wi":[619.2,175.7],"s:wy":[352.9,200.3],"s:dc":[827.1,261.3]}};
+
+
+/* ═══════════════════════════════════════════════════════
+   NETWORK MAP  (replaces the lane board)
+   Geography: US Census state boundaries, simplified and
+   pre-projected through an Albers USA projection at build
+   time — so no mapping library ships with the page.
+   Every coordinate below is real; nothing is decorative.
+═══════════════════════════════════════════════════════ */
+
+// US state name → 2-letter code, for turning a pickup address into a point
+const DSH_LL={"c:city of industry,ca":[-117.958,34.019],"c:modesto,ca":[-120.997,37.639],"c:hanford,ca":[-119.646,36.327],"c:earlimart,ca":[-119.271,35.883],"c:watsonville,ca":[-121.757,36.91],"c:lindsay,ca":[-119.088,36.203],"c:st. louis,mo":[-90.199,38.627],"c:saint louis,mo":[-90.199,38.627],"c:council bluffs,ia":[-95.862,41.262],"c:moses lake,wa":[-119.278,47.13],"c:fairfield,nj":[-74.305,40.883],"c:phoenix,az":[-112.074,33.448],"c:pasadena,tx":[-95.209,29.691],"c:plover,wi":[-89.544,44.454],"c:north plains,or":[-122.994,45.598],"c:north aurora,il":[-88.327,41.806],"c:sugar city,id":[-111.746,43.871],"c:los angeles,ca":[-118.244,34.052],"c:commerce,ca":[-118.159,33.996],"c:vernon,ca":[-118.23,34.003],"c:humble,tx":[-95.262,29.999],"c:houston,tx":[-95.369,29.76],"c:sacramento,ca":[-121.494,38.582],"c:fresno,ca":[-119.787,36.747],"c:north york,on":[-79.412,43.761],"s:al":[-86.79,32.81],"s:ak":[-152.4,63.6],"s:az":[-111.66,34.29],"s:ar":[-92.44,34.97],"s:ca":[-119.68,36.12],"s:co":[-105.31,39.06],"s:ct":[-72.76,41.6],"s:de":[-75.51,39.32],"s:fl":[-81.69,27.77],"s:ga":[-83.64,33.04],"s:hi":[-157.5,21.09],"s:id":[-114.48,44.24],"s:il":[-88.99,40.35],"s:in":[-86.26,39.85],"s:ia":[-93.21,42.01],"s:ks":[-96.73,38.53],"s:ky":[-84.67,37.67],"s:la":[-91.87,31.17],"s:me":[-69.38,44.69],"s:md":[-76.8,39.06],"s:ma":[-71.53,42.23],"s:mi":[-84.54,43.33],"s:mn":[-93.9,45.69],"s:ms":[-89.68,32.74],"s:mo":[-92.29,38.46],"s:mt":[-110.45,46.92],"s:ne":[-98.27,41.13],"s:nv":[-117.06,38.31],"s:nh":[-71.56,43.45],"s:nj":[-74.52,40.3],"s:nm":[-106.25,34.84],"s:ny":[-74.95,42.17],"s:nc":[-79.81,35.63],"s:nd":[-99.78,47.53],"s:oh":[-82.76,40.39],"s:ok":[-96.93,35.57],"s:or":[-122.07,44.57],"s:pa":[-77.21,40.59],"s:ri":[-71.51,41.68],"s:sc":[-80.95,33.86],"s:sd":[-99.44,44.3],"s:tn":[-86.69,35.75],"s:tx":[-97.56,31.05],"s:ut":[-111.86,40.15],"s:vt":[-72.71,44.05],"s:va":[-78.17,37.77],"s:wa":[-121.49,47.4],"s:wv":[-80.95,38.49],"s:wi":[-89.62,44.27],"s:wy":[-107.3,42.76],"s:dc":[-77.03,38.9]};
+
+/* ═══════════════════════════════════════════════════════
+   TRANSIT MODEL
+   Turns a lane into a real schedule: road miles, transit
+   days by mode, an ETA, and how far along the load is
+   right now. Everything below is derived from the pickup
+   date and the shipment's own mode — nothing is faked.
+═══════════════════════════════════════════════════════ */
+
+// Great-circle miles between two [lon,lat] pairs.
+function dshGcMiles(a, b){
+  if(!a || !b) return null;
+  const R = 3958.8, rad = d => d * Math.PI / 180;
+  const dLat = rad(b[1] - a[1]), dLon = rad(b[0] - a[0]);
+  const h = Math.sin(dLat/2)**2 + Math.cos(rad(a[1])) * Math.cos(rad(b[1])) * Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+// Highways do not run in straight lines. 1.17 is the standard road-circuity
+// factor for the US network — it puts LA→Houston at ~1,605 mi against a real
+// ~1,550, and Newark→LA at ~2,842 against a real ~2,790.
+const DSH_CIRCUITY = 1.17;
+
+function dshRoadMiles(a, b){
+  const gc = dshGcMiles(a, b);
+  return gc == null ? null : gc * DSH_CIRCUITY;
+}
+
+// LTL carriers publish service maps in business days by distance band.
+// These are the common standards; terminal handling is already baked in.
+function dshLtlDays(miles){
+  if(miles <=  250) return 1;
+  if(miles <=  500) return 2;
+  if(miles <= 1000) return 3;
+  if(miles <= 1500) return 4;
+  if(miles <= 2000) return 5;
+  if(miles <= 2500) return 6;
+  return 7;
+}
+
+// FTL is one truck, door to door. Under hours-of-service a solo driver covers
+// roughly 550 miles a day including fuel and breaks, and runs weekends.
+function dshFtlDays(miles){
+  return Math.max(1, Math.round(miles / 550));
+}
+
+function dshParseDate(iso){
+  if(!iso) return null;
+  const d = new Date(String(iso).slice(0,10) + 'T00:00:00');
+  return isNaN(d.getTime()) ? null : d;
+}
+function dshAddDays(from, days, businessOnly){
+  const d = new Date(from.getTime());
+  let added = 0;
+  while(added < days){
+    d.setDate(d.getDate() + 1);
+    if(businessOnly){ const w = d.getDay(); if(w === 0 || w === 6) continue; }
+    added++;
+  }
+  return d;
+}
+function dshFmtShort(d){
+  return d ? d.toLocaleDateString('en-US', {month:'short', day:'numeric'}) : '—';
+}
+
+/* Build the schedule for one lane.
+   originLL / destLL are [lon,lat]; mode is 'FTL' or 'LTL'. */
+function dshTransitPlan(originLL, destLL, mode, puDateIso, delDateIso){
+  const miles = dshRoadMiles(originLL, destLL);
+  const isFtl = String(mode || '').toUpperCase() === 'FTL';
+  let days = null;
+  if(miles != null) days = isFtl ? dshFtlDays(miles) : dshLtlDays(miles);
+
+  const pu = dshParseDate(puDateIso);
+  // An explicit delivery date on the record always beats the estimate.
+  const promised = dshParseDate(delDateIso);
+  let eta = null, estimated = true;
+  if(promised){ eta = promised; estimated = false; }
+  else if(pu && days != null){ eta = dshAddDays(pu, days, !isFtl); }
+
+  let progress = null, daysLeft = null, late = false, elapsed = null;
+  // A delivery date that has already passed is overdue on its own, whether or
+  // not the record ever got a pickup date. Without this a load with a due date
+  // but no PU date would sit as "no pickup date" and never raise a flag.
+  if(!pu && eta){
+    const now = new Date();
+    daysLeft = Math.ceil((eta.getTime() - now.getTime()) / 86400000);
+    late = now.getTime() > eta.getTime();
+  }
+  if(pu && eta){
+    const now = new Date();
+    const span = eta.getTime() - pu.getTime();
+    elapsed = now.getTime() - pu.getTime();
+    if(span > 0){
+      progress = Math.max(0, Math.min(1, elapsed / span));
+      daysLeft = Math.ceil((eta.getTime() - now.getTime()) / 86400000);
+      late = now.getTime() > eta.getTime();
+    } else if(span <= 0){
+      progress = now.getTime() >= eta.getTime() ? 1 : 0;
+      daysLeft = Math.ceil((eta.getTime() - now.getTime()) / 86400000);
+      late = now.getTime() > eta.getTime();
+    }
+  }
+  return {
+    miles: miles == null ? null : Math.round(miles),
+    days, mode: isFtl ? 'FTL' : 'LTL', pu, eta, estimated,
+    progress, daysLeft, late,
+    elapsedDays: elapsed == null ? null : Math.max(0, Math.floor(elapsed / 86400000))
+  };
+}
+
+/* Split a quadratic Bézier at t (de Casteljau) so the travelled portion of a
+   lane can be drawn solid and the remainder left faint. */
+function dshSplitQuad(x0,y0,mx,my,x1,y1,t){
+  const lx = (a,b) => a + (b-a)*t;
+  const q0x = lx(x0,mx), q0y = lx(y0,my);
+  const q1x = lx(mx,x1), q1y = lx(my,y1);
+  const rx  = lx(q0x,q1x), ry = lx(q0y,q1y);
+  const f = n => n.toFixed(1);
+  return {
+    done: 'M'+f(x0)+','+f(y0)+' Q'+f(q0x)+','+f(q0y)+' '+f(rx)+','+f(ry),
+    rest: 'M'+f(rx)+','+f(ry)+' Q'+f(q1x)+','+f(q1y)+' '+f(x1)+','+f(y1),
+    x: rx, y: ry,
+    // tangent at t, for pointing the truck down the road
+    dx: 2*(1-t)*(mx-x0) + 2*t*(x1-mx),
+    dy: 2*(1-t)*(my-y0) + 2*t*(y1-my)
+  };
+}
+
+const DSH_ABBR = {alabama:'al',alaska:'ak',arizona:'az',arkansas:'ar',california:'ca',colorado:'co',
+connecticut:'ct',delaware:'de',florida:'fl',georgia:'ga',hawaii:'hi',idaho:'id',illinois:'il',
+indiana:'in',iowa:'ia',kansas:'ks',kentucky:'ky',louisiana:'la',maine:'me',maryland:'md',
+massachusetts:'ma',michigan:'mi',minnesota:'mn',mississippi:'ms',missouri:'mo',montana:'mt',
+nebraska:'ne',nevada:'nv','new hampshire':'nh','new jersey':'nj','new mexico':'nm','new york':'ny',
+'north carolina':'nc','north dakota':'nd',ohio:'oh',oklahoma:'ok',oregon:'or',pennsylvania:'pa',
+'rhode island':'ri','south carolina':'sc','south dakota':'sd',tennessee:'tn',texas:'tx',utah:'ut',
+vermont:'vt',virginia:'va',washington:'wa','west virginia':'wv',wisconsin:'wi',wyoming:'wy',
+'district of columbia':'dc'};
+const DSH_STATE_NAME = {};
+Object.entries(DSH_ABBR).forEach(([n,a]) => { DSH_STATE_NAME[a] = n.replace(/\b\w/g, c => c.toUpperCase()); });
+
+// Parse a free-text pickup address into { city, state, pt }.
+// Falls back from an exact city match to the state centroid, and reports
+// honestly when neither can be resolved rather than inventing a location.
+const _dshGeoCache = {};
+function dshGeo(addr){
+  if(!addr) return null;
+  if(_dshGeoCache[addr] !== undefined) return _dshGeoCache[addr];
+  const txt = String(addr).trim();
+  let city = '', st = '';
+
+  // "…, City, ST 12345"  |  "…, City ST"  |  "City, ST"
+  let m = txt.match(/,\s*([A-Za-z .'\-]+?)[,\s]+([A-Z]{2})\b(?:\s+\d{5})?\s*$/);
+  if(!m) m = txt.match(/,\s*([A-Za-z .'\-]+?)[,\s]+([A-Z]{2})\b/);
+  if(m){ city = m[1].trim().toLowerCase(); st = m[2].toLowerCase(); }
+  else {
+    // no comma form: "Plover, WI 54467" already caught above; try a bare "City ST"
+    const m2 = txt.match(/([A-Za-z .'\-]+?)[,\s]+([A-Z]{2})\b(?:\s+\d{5})?\s*$/);
+    if(m2){ city = m2[1].trim().toLowerCase().replace(/^.*\d\s+/,''); st = m2[2].toLowerCase(); }
+  }
+  // last resort: the address names a state in words ("… California Almonds")
+  if(!st){
+    const low = txt.toLowerCase();
+    const hit = Object.keys(DSH_ABBR).find(nm => nm.length > 4 && low.includes(nm));
+    if(hit) st = DSH_ABBR[hit];
+  }
+  let pt = null, label = '', ll = null;
+  if(city && DSH_MAP.pts['c:' + city + ',' + st]){
+    pt = DSH_MAP.pts['c:' + city + ',' + st]; ll = DSH_LL['c:' + city + ',' + st]; label = city; }
+  else if(st && DSH_MAP.pts['s:' + st]){ pt = DSH_MAP.pts['s:' + st]; ll = DSH_LL['s:' + st]; label = city || ''; }
+  const res = pt ? { pt, ll, st, city: label, exact: !!(city && DSH_MAP.pts['c:' + city + ',' + st]) } : null;
+  _dshGeoCache[addr] = res;
+  return res;
+}
+
+// Destination plants resolve through the PLANTS address, same parser.
+function dshPlantPt(locLabel){
+  const k = dshPlantKey(locLabel);
+  const p = (k && typeof PLANTS !== 'undefined') ? PLANTS[k] : null;
+  if(p && p.address){ const g = dshGeo(p.address); if(g) return g; }
+  return null;
+}
+
+/* small truck glyph, pointing +x, centred on (0,0). Inbound trucks are
+   solid carrier colour; transfer trucks have a hollow trailer so the two
+   read differently at a glance. */
+function dshTruckSvg(color, kind){
+  const trailer = kind === 'tr'
+    ? '<rect x="-8.8" y="-5.2" width="10.6" height="6.8" rx="1.3" fill="#fffdfc" stroke="' + color + '" stroke-width="1.4"/>'
+    : '<rect x="-8.8" y="-5.2" width="10.6" height="6.8" rx="1.3" fill="' + color + '" stroke="#fffdfc" stroke-width=".9"/>';
+  const cab = '<path d="M2.2 -3.4 h3.4 l2.7 2.5 v2.5 h-6.1 z" fill="' + color + '" stroke="#fffdfc" stroke-width=".7"/>';
+  const wheels = '<circle cx="-4.8" cy="2.6" r="1.7" fill="#292524" stroke="#fffdfc" stroke-width=".6"/>'
+               + '<circle cx="5.4" cy="2.6" r="1.7" fill="#292524" stroke="#fffdfc" stroke-width=".6"/>';
+  return trailer + cab + wheels;
+}
+
+function dshBuildBoard(){
+  const svg = document.getElementById('dsh-svg');
+  const wrap = document.querySelector('#panel-dashboard .dsh-mapwrap');
+  if(!svg) return;
+
+  const all = dshRows();
+  const scoped = all.filter(r =>
+    (!DSH.month   || r.month === DSH.month) &&
+    (!DSH.carrier || r.s.approved === DSH.carrier) &&
+    (DSH.view !== 'transit' || r.s.status === 'In Transit') &&
+    (!DSH.originState || (dshGeo(r.s.puAddr) || {}).st === DSH.originState)
+  );
+
+  // transfers in scope — same filters, but these are plant-to-plant moves
+  const trScoped = (typeof transfers !== 'undefined' ? transfers : []).filter(t =>
+    (!DSH.month   || (t.date||'').slice(0,7) === DSH.month) &&
+    (!DSH.carrier || t.approved === DSH.carrier) &&
+    (DSH.view !== 'transit' || t.status === 'In Transit') &&
+    (!DSH.originState || ((dshPlantPt(t.from)||{}).st === DSH.originState))
+  );
+
+  // group by destination plant
+  const byLoc = {};
+  scoped.forEach(r => {
+    if(!byLoc[r.loc]) byLoc[r.loc] = {name:r.loc, rows:[], cost:0, save:0, mix:{}};
+    const b = byLoc[r.loc];
+    b.rows.push(r); b.cost += r.cost; b.save += r.save;
+    if(r.s.approved) b.mix[r.s.approved] = (b.mix[r.s.approved]||0) + 1;
+  });
+  let locs = Object.values(byLoc);
+  locs.forEach(l => {
+    l.top = Object.entries(l.mix).sort((a,b)=>b[1]-a[1])[0]?.[0] || null;
+    l.geo = dshPlantPt(l.name);
+  });
+  // plants we cannot place get reported, never silently dropped
+  const unplaced = locs.filter(l => !l.geo);
+  locs = locs.filter(l => l.geo).sort((a,b)=>b.cost-a.cost);
+
+  // plants that only appear as transfer endpoints (or every plant, when the
+  // "show all plants" toggle is on) still get their own marker on the board
+  const seenLoc = new Set(locs.map(l => l.name));
+  const addPseudoLoc = nm => {
+    const lbl = dshLocLabel(nm);
+    if(!lbl || seenLoc.has(lbl)) return;
+    const geo = dshPlantPt(nm);
+    if(!geo) return;
+    locs.push({ name:lbl, rows:[], cost:0, save:0, mix:{}, top:null, geo });
+    seenLoc.add(lbl);
+  };
+  trScoped.forEach(t => { addPseudoLoc(t.from); addPseudoLoc(t.to); });
+  if(DSH.showEmpty && typeof PLANTS !== 'undefined') Object.keys(PLANTS).forEach(addPseudoLoc);
+
+  // transfer involvement per plant, for the marker sub-labels
+  const trByPlant = {};
+  trScoped.forEach(t => {
+    [dshLocLabel(t.from), dshLocLabel(t.to)].forEach(lbl => { trByPlant[lbl] = (trByPlant[lbl]||0) + 1; });
+  });
+
+  const maxCost = Math.max(...locs.map(l=>l.cost), 1);
+  const W = DSH_MAP.W, H = DSH_MAP.H;
+
+  // which states have origin activity (for the choropleth tint)
+  const stateLoad = {};
+  scoped.forEach(r => { const g = dshGeo(r.s.puAddr); if(g && g.st) stateLoad[g.st] = (stateLoad[g.st]||0)+1; });
+
+  let out = '<defs>';
+  out += '<filter id="dshGlow" x="-60%" y="-60%" width="220%" height="220%">'
+      +  '<feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>';
+  out += '</defs>';
+
+  // ── states ────────────────────────────────────────────
+  out += '<g id="dsh-states">';
+  Object.entries(DSH_MAP.states).forEach(([name, d]) => {
+    const ab = DSH_ABBR[name.toLowerCase()];
+    const has = ab && stateLoad[ab];
+    const on = ab && DSH.originState === ab;
+    const cls = 'dsh-st' + (on ? ' on' : has ? ' has' : (DSH.originState ? ' dim' : ''));
+    const click = has ? ' onclick="dshSetOriginState(\'' + ab + '\')"' : '';
+    const t = has ? '<title>' + name + ' — ' + stateLoad[ab] + ' pickup' + (stateLoad[ab]===1?'':'s') + '</title>' : '';
+    out += '<path class="' + cls + '" d="' + d + '"' + click + '>' + t + '</path>';
+  });
+  out += '</g>';
+
+  // ── plant marker layout ───────────────────────────────
+  // Several JSL plants sit inside the same metro — Indiana and Pasadena
+  // both geocode to Los Angeles, Davie to Commerce a pixel away. At national
+  // scale their markers coincide, so members of a metro cluster are fanned
+  // out to their OWN marker positions (every plant keeps its own point on
+  // the board) with leader lines back to the true location.
+  const CLUSTER_PX = 16;
+  const clusters = [];
+  locs.forEach(l => {
+    const [x,y] = l.geo.pt;
+    const hit = clusters.find(c => Math.hypot(c.x - x, c.y - y) <= CLUSTER_PX);
+    if(hit){ hit.members.push(l);
+             hit.x = hit.members.reduce((a,m)=>a+m.geo.pt[0],0)/hit.members.length;
+             hit.y = hit.members.reduce((a,m)=>a+m.geo.pt[1],0)/hit.members.length; }
+    else clusters.push({ x, y, members:[l] });
+  });
+
+  // every plant gets its own display point; metro clusters fan vertically
+  clusters.forEach(c => {
+    if(c.members.length === 1){ c.members[0].disp = [c.x, c.y]; return; }
+    const right = c.x < W * 0.62;
+    const dir = right ? 1 : -1;
+    const ROW = 36;
+    const mx = c.x + dir * 52;
+    const y0 = c.y - ((c.members.length - 1) * ROW) / 2;
+    c.members.forEach((l, mi) => { l.disp = [mx, y0 + mi * ROW]; });
+  });
+  const dispOf = {};
+  locs.forEach(l => { dispOf[l.name] = l.disp; });
+
+  // ── lanes: one arc per shipment, origin → plant ───────
+  const arcs = [];
+  locs.forEach(l => {
+    l.rows.forEach(r => {
+      const g = dshGeo(r.s.puAddr); if(!g) return;
+      const [x0,y0] = g.pt, [x1,y1] = l.disp;
+      const dx = x1-x0, dy = y1-y0;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if(dist < 2) return;                       // same city — no arc to draw
+      // perpendicular offset gives the great-circle feel; longer lanes bow more
+      const bow = Math.min(dist * 0.22, 96);
+      const mx = (x0+x1)/2 - (dy/dist) * bow;
+      const my = (y0+y1)/2 + (dx/dist) * bow;
+      const dGeo = dshPlantPt(l.name);
+      const plan = dshTransitPlan(g.ll, dGeo && dGeo.ll, r.s.type, r.s.puDate || r.s.date, r.s.delDate);
+      arcs.push({ kind:'in', r, l, x0, y0, x1, y1, mx, my, dist, plan,
+                  color: dshCar(r.s.approved).color, seed: (r.s.id || arcs.length + 1),
+                  d: 'M' + x0 + ',' + y0 + ' Q' + mx.toFixed(1) + ',' + my.toFixed(1) + ' ' + x1 + ',' + y1 });
+    });
+  });
+
+  // ── transfer lanes: plant → plant, drawn dashed ───────
+  trScoped.forEach(t => {
+    const A = dispOf[dshLocLabel(t.from)], B = dispOf[dshLocLabel(t.to)];
+    if(!A || !B) return;                         // reported below, never invented
+    const [x0,y0] = A, [x1,y1] = B;
+    const dx = x1-x0, dy = y1-y0;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if(dist < 2) return;
+    // bow to the OPPOSITE side of inbound lanes so the two families separate
+    const bow = Math.min(dist * 0.3, 70);
+    const mx = (x0+x1)/2 + (dy/dist) * bow;
+    const my = (y0+y1)/2 - (dx/dist) * bow;
+    const aG = dshPlantPt(dshLocLabel(t.from)), bG = dshPlantPt(dshLocLabel(t.to));
+    const trPlan = dshTransitPlan(aG && aG.ll, bG && bG.ll, t.type, t.puDate || t.date, t.delDate);
+    arcs.push({ kind:'tr', t, fromLoc: dshLocLabel(t.from), toLoc: dshLocLabel(t.to),
+                x0, y0, x1, y1, mx, my, dist, plan: trPlan,
+                color: dshCar(t.approved).color, seed: (t.id || arcs.length + 1),
+                d: 'M' + x0.toFixed(1) + ',' + y0.toFixed(1) + ' Q' + mx.toFixed(1) + ',' + my.toFixed(1)
+                   + ' ' + x1.toFixed(1) + ',' + y1.toFixed(1) });
+  });
+
+  out += '<g id="dsh-arcs">';
+  const transitView = DSH.view === 'transit';
+  arcs.forEach((a,i) => {
+    const amt = a.kind === 'tr' ? (a.t.approvedAmt || 0) : a.r.cost;
+    const w = 0.9 + Math.min(amt / 2600, 2.2);
+    const trCls = a.kind === 'tr' ? ' tr' : '';
+    const prog = a.plan ? a.plan.progress : null;
+
+    if(transitView && prog != null){
+      // Split the lane at the load's actual progress: the distance already
+      // covered is drawn solid, what is left stays faint.
+      const sp = dshSplitQuad(a.x0, a.y0, a.mx, a.my, a.x1, a.y1, prog);
+      a.split = sp;
+      out += '<path class="dsh-lane rest' + trCls + '" d="' + sp.rest + '" stroke="' + a.color + '"'
+          +  ' stroke-width="' + w.toFixed(2) + '" opacity="0.16"/>'
+          +  '<path class="dsh-lane done' + trCls + '" id="dsh-lane-' + i + '" d="' + sp.done + '" stroke="' + a.color + '"'
+          +  ' stroke-width="' + (w + 0.7).toFixed(2) + '" opacity="' + (a.plan.late ? '0.95' : '0.8') + '"/>';
+    } else {
+      out += '<path class="dsh-lane' + trCls + '" id="dsh-lane-' + i + '" d="' + a.d + '" stroke="' + a.color + '"'
+          +  ' stroke-width="' + w.toFixed(2) + '" opacity="0.42"/>';
+    }
+    out += '<path class="dsh-lanehit" d="' + a.d + '" data-arc="' + i + '"/>';
+  });
+  out += '</g>';
+
+  // ── origin markers (inbound pickups only) ─────────────
+  const origins = {};
+  arcs.filter(a => a.kind === 'in').forEach(a => {
+    const k = a.x0 + ',' + a.y0;
+    if(!origins[k]) origins[k] = { x:a.x0, y:a.y0, rows:[], geo:dshGeo(a.r.s.puAddr) };
+    origins[k].rows.push(a.r);
+  });
+  out += '<g id="dsh-origins">';
+  Object.values(origins).forEach((o,i) => {
+    const c = dshCar(o.rows[0].s.approved).color;
+    const cost = o.rows.reduce((s,r)=>s+r.cost,0);
+    out += '<g class="dsh-org" id="dsh-org-' + i + '" data-org="' + i + '">'
+        +  '<circle cx="' + o.x + '" cy="' + o.y + '" r="7" fill="' + c + '" opacity=".10"/>'
+        +  '<circle class="core" cx="' + o.x + '" cy="' + o.y + '" r="3.2" fill="' + c + '" stroke="#fffdfc" stroke-width="1.1"/>'
+        +  '<title>' + dshEsc((o.geo && o.geo.city ? o.geo.city.replace(/\b\w/g,ch=>ch.toUpperCase()) + ', ' : '')
+           + (o.geo && o.geo.st ? o.geo.st.toUpperCase() : '')) + ' — ' + o.rows.length + ' load'
+           + (o.rows.length===1?'':'s') + ' · ' + dshMoney(cost) + '</title>'
+        +  '</g>';
+  });
+  out += '</g>';
+
+  // ── plant markers — one per plant, fanned when a metro overlaps ──
+  out += '<g id="dsh-plants">';
+  clusters.forEach((c, ci) => {
+    const multi = c.members.length > 1;
+    const right = c.x < W * 0.62;
+    const dir = right ? 1 : -1;
+    const anc = right ? 'start' : 'end';
+
+    if(multi){
+      // small anchor pin marks the true metro location the fan spreads from
+      out += '<g class="dsh-anchor">'
+          +  '<circle class="aring" cx="' + c.x.toFixed(1) + '" cy="' + c.y.toFixed(1) + '" r="6.5"/>'
+          +  '<circle class="acore" cx="' + c.x.toFixed(1) + '" cy="' + c.y.toFixed(1) + '" r="2.6"/>'
+          +  '<title>' + c.members.length + ' JSL plants share this metro — markers fanned for legibility</title>'
+          +  '</g>';
+    }
+
+    c.members.forEach((l, mi) => {
+      const [px, py] = l.disp;
+      const rad = 5 + ((l.cost || 0) / maxCost) * 6;
+      const sel = DSH.plant === l.name ? ' on' : '';
+      const trN = trByPlant[l.name] || 0;
+      const flavor = !l.rows.length ? (trN ? ' xfer' : ' idle') : '';
+      const bits = [];
+      if(l.rows.length) bits.push(dshMoney(l.cost) + ' · ' + l.rows.length + ' load' + (l.rows.length===1?'':'s'));
+      if(trN) bits.push(trN + ' transfer' + (trN===1?'':'s'));
+      const sub = bits.join(' · ') || 'no loads in scope';
+      // Solid label chip rather than a stroked text halo: `paint-order` is not
+      // universally honoured by SVG rasterisers, and a chip stays legible where
+      // a label crosses an arc.
+      const chipW = Math.max(l.name.length * 6.5, sub.length * 5.0) + 18;
+      const chipH = 25;
+      const cx0 = px + dir * (rad * 1.35 + 8);
+      const chipX = right ? cx0 : cx0 - chipW;
+      const tx = right ? chipX + 9 : chipX + chipW - 9;
+      out += '<g class="dsh-plant dsh-cluster' + sel + flavor + '" id="dsh-plant-' + ci + '-' + mi + '" data-plant="' + dshEsc(l.name) + '"'
+          +  ' onclick="dshSetPlant(\'' + dshEsc(l.name).replace(/'/g,"\\'") + '\')">'
+          +  (multi ? '<path class="lead" d="M' + (c.x + dir * 7).toFixed(1) + ',' + c.y.toFixed(1)
+                    + ' L' + (px - dir * (rad * 1.6 + 3)).toFixed(1) + ',' + py.toFixed(1) + '"/>' : '')
+          +  '<circle class="halo" cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="' + (rad*2.0).toFixed(1) + '"/>'
+          +  '<circle class="ring" cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="' + (rad*1.35).toFixed(1) + '"/>'
+          +  '<circle class="core" cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="' + (rad*0.55).toFixed(1) + '"/>'
+          +  '<rect class="chip" x="' + chipX.toFixed(1) + '" y="' + (py - chipH/2).toFixed(1) + '"'
+             + ' width="' + chipW.toFixed(1) + '" height="' + chipH + '" rx="6"/>'
+          +  '<text class="pn" x="' + tx.toFixed(1) + '" y="' + (py - 1).toFixed(1) + '" text-anchor="' + anc + '">' + dshEsc(l.name) + '</text>'
+          +  '<text class="pv" x="' + tx.toFixed(1) + '" y="' + (py + 9).toFixed(1) + '" text-anchor="' + anc + '">' + sub + '</text>'
+          +  '</g>';
+    });
+  });
+  out += '</g>';
+
+  out += '<g id="dsh-pulses"></g>';
+  out += '<text class="dsh-maplbl" x="16" y="' + (H-14) + '">JSL FOODS · FREIGHT NETWORK</text>';
+
+  // legend — how to read the two truck families
+  out += '<g id="dsh-legend" transform="translate(' + (W - 176) + ',14)">'
+      +  '<rect x="0" y="0" width="162" height="54" rx="9" fill="#fffdfc" fill-opacity=".92" stroke="#f0e4e2"/>'
+      +  '<g transform="translate(17,16) scale(.92)">' + dshTruckSvg('#9b1c1c','in') + '</g>'
+      +  '<text x="33" y="19" font-size="9.5" font-weight="700" fill="#57534e">Inbound shipment</text>'
+      +  '<g transform="translate(17,39) scale(.92)">' + dshTruckSvg('#b45309','tr') + '</g>'
+      +  '<text x="33" y="42" font-size="9.5" font-weight="700" fill="#57534e">Plant transfer</text>'
+      +  '</g>';
+
+  svg.innerHTML = out;
+  const inArcs = arcs.filter(a => a.kind === 'in');
+  const trArcs = arcs.filter(a => a.kind === 'tr');
+  DSH.arcs = arcs; DSH.locs = locs.filter(l => l.rows.length); DSH.origins = Object.values(origins);
+  DSH.legLock = null;   // a rebuilt board invalidates any picked lane
+
+  document.getElementById('dsh-board-sub').textContent =
+    (DSH.view === 'transit' ? 'In transit — ' : '')
+    + locs.length + ' plant' + (locs.length===1?'':'s')
+    + ' · ' + Object.keys(origins).length + ' origin' + (Object.keys(origins).length===1?'':'s')
+    + ' · ' + inArcs.length + ' inbound'
+    + ' · ' + trArcs.length + ' transfer' + (trArcs.length===1?'':'s');
+
+  // honest reporting of anything the map could not place
+  const noGeo = scoped.filter(r => !dshGeo(r.s.puAddr)).length;
+  const trNoGeo = trScoped.filter(t => !dispOf[dshLocLabel(t.from)] || !dispOf[dshLocLabel(t.to)]).length;
+  const bits = [];
+  if(noGeo) bits.push(noGeo + ' shipment' + (noGeo===1?'':'s') + ' without a locatable pickup address');
+  if(trNoGeo) bits.push(trNoGeo + ' transfer' + (trNoGeo===1?'':'s') + ' without a locatable plant');
+  if(unplaced.length) bits.push(unplaced.map(u=>u.name).join(', ') + ' has no plant address on file');
+  document.getElementById('dsh-offmap').textContent = bits.length ? 'Not shown: ' + bits.join(' · ') : '';
+
+  dshWireArcs();
+  dshStartLoop();
+  dshBriefBuild();
+}
+
+/* ── hover: tooltip on any lane ─────────────────────────── */
+/* One-line schedule summary: miles, mode, ETA and how it is tracking. */
+function dshPlanLine(plan){
+  if(!plan) return '';
+  const bits = [];
+  if(plan.miles != null) bits.push(plan.miles.toLocaleString('en-US') + ' mi');
+  if(plan.days != null)  bits.push(plan.days + '-day ' + plan.mode);
+  let line = bits.join(' · ');
+  if(plan.eta){
+    const tag = plan.estimated ? 'ETA' : 'Due';
+    line += '<br>' + tag + ' ' + dshFmtShort(plan.eta);
+    if(plan.progress != null){
+      const pct = Math.round(plan.progress * 100);
+      if(plan.late && plan.daysLeft < 0) line += ' <span style="color:#fca5a5">· ' + Math.abs(plan.daysLeft) + 'd overdue</span>';
+      else if(plan.daysLeft <= 0)         line += ' <span style="color:#fcd34d">· arriving today</span>';
+      else                        line += ' <span style="color:#86efac">· ' + pct + '% · ' + plan.daysLeft + 'd left</span>';
+    }
+  } else if(plan.days != null){
+    line += '<br>No pickup date on file';
+  }
+  return line;
+}
+
+function dshWireArcs(){
+  const tip = document.getElementById('dsh-tip');
+  const wrap = document.querySelector('#panel-dashboard .dsh-mapwrap');
+  if(!tip || !wrap) return;
+  document.querySelectorAll('#panel-dashboard .dsh-lanehit').forEach(hit => {
+    const a = DSH.arcs[+hit.dataset.arc]; if(!a) return;
+    const solo = () => {
+      document.querySelectorAll('#panel-dashboard .dsh-lane').forEach(p => p.classList.add('faded'));
+      const me = document.getElementById('dsh-lane-' + hit.dataset.arc);
+      if(me){ me.classList.remove('faded'); me.classList.add('hot'); }
+    };
+    hit.addEventListener('mouseenter', () => {
+      solo();
+      if(a.kind === 'tr'){
+        tip.innerHTML = '<b>Transfer ' + dshEsc(a.t.ref || '—') + '</b><br>'
+          + dshEsc(a.fromLoc) + ' &rarr; ' + dshEsc(a.toLoc)
+          + '<div class="tl">Inter-plant transfer' + (a.t.status ? ' · ' + dshEsc(a.t.status) : '') + '</div>'
+          + dshEsc(dshCar(a.t.approved).short) + ' · ' + dshMoney2(a.t.approvedAmt || 0)
+          + (a.plan ? '<div class="tl" style="margin-top:5px;">' + dshPlanLine(a.plan) + '</div>' : '');
+      } else {
+        const g = dshGeo(a.r.s.puAddr);
+        const from = g ? ((g.city ? g.city.replace(/\b\w/g,c=>c.toUpperCase()) + ', ' : '') + (g.st||'').toUpperCase()) : '—';
+        tip.innerHTML = '<b>PO ' + dshEsc(a.r.s.po || '—') + '</b><br>' + dshEsc(a.r.s.vendor || '—')
+          + '<div class="tl">' + dshEsc(from) + ' &rarr; ' + dshEsc(a.l.name)
+          + (a.r.s.status ? ' · ' + dshEsc(a.r.s.status) : '') + '</div>'
+          + dshEsc(dshCar(a.r.s.approved).short) + ' · ' + dshMoney2(a.r.cost)
+          + (a.r.save > 0 ? ' <span style="color:#86efac">· saved ' + dshMoney2(a.r.save) + '</span>' : '')
+          + (a.plan ? '<div class="tl" style="margin-top:5px;">' + dshPlanLine(a.plan) + '</div>' : '');
+      }
+      tip.style.display = 'block';
+    });
+    hit.addEventListener('mousemove', e => {
+      const b = wrap.getBoundingClientRect();
+      let x = e.clientX - b.left + 14, y = e.clientY - b.top + 14;
+      if(x + 262 > b.width) x = e.clientX - b.left - 260;
+      if(y + 90 > b.height) y = e.clientY - b.top - 84;
+      tip.style.left = x + 'px'; tip.style.top = y + 'px';
+    });
+    hit.addEventListener('mouseleave', () => {
+      tip.style.display = 'none';
+      document.querySelectorAll('#panel-dashboard .dsh-lane').forEach(p => { p.classList.remove('faded'); p.classList.remove('hot'); });
+    });
+    hit.addEventListener('click', () => dshSetPlant(a.kind === 'tr' ? a.toLoc : a.l.name));
+  });
+}
+
+/* ── travelling pulses ──────────────────────────────────── */
+/* Put a truck at fraction u along its lane, nose pointing down the road. */
+function dshPlaceTruck(el, a, u){
+  const iu = 1 - u;
+  const x = iu*iu*a.x0 + 2*iu*u*a.mx + u*u*a.x1;
+  const y = iu*iu*a.y0 + 2*iu*u*a.my + u*u*a.y1;
+  const dxu = 2*iu*(a.mx - a.x0) + 2*u*(a.x1 - a.mx);
+  const dyu = 2*iu*(a.my - a.y0) + 2*u*(a.y1 - a.my);
+  const deg = Math.atan2(dyu, dxu) * 180 / Math.PI;
+  // flip across the truck's own axis when heading west, so the wheels stay down
+  const sy = (deg > 90 || deg < -90) ? -0.95 : 0.95;
+  el.setAttribute('transform',
+    'translate(' + x.toFixed(1) + ',' + y.toFixed(1) + ') rotate(' + deg.toFixed(1) + ') scale(0.95,' + sy + ')');
+}
+
+function dshStartLoop(){
+  const host = document.getElementById('dsh-pulses');
+  if(!host) return;
+  const reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+  // cap the number of simultaneous pulses so a big month stays smooth
+  const CAP = 26;
+  let picks = DSH.arcs;
+  if(picks.length > CAP){
+    const step = picks.length / CAP;
+    picks = Array.from({length:CAP}, (_,k) => picks[Math.floor(k*step)]);
+  }
+  let inner = '';
+  picks.forEach((a,i) => {
+    const lateCls = (DSH.view === 'transit' && a.plan && a.plan.late && a.plan.daysLeft < 0) ? ' late' : '';
+    inner += '<g class="dsh-pulse' + lateCls + '" id="dsh-pl-' + i + '">' + dshTruckSvg(a.color, a.kind) + '</g>';
+  });
+  host.innerHTML = inner;
+  DSH.pulses = picks.map((a,i) => ({
+    a, el: document.getElementById('dsh-pl-' + i),
+    t: (((a.seed * 41) % 100) / 100),
+    sp: 0.0016 + (((a.seed * 67) % 100) / 100) * 0.0016
+  }));
+
+  // In the In-Transit view the trucks are not a decoration — each one is
+  // parked at the share of the trip that has actually elapsed, so the board
+  // reads as a position report rather than an animation.
+  if(DSH.view === 'transit'){
+    // Loads that have arrived all resolve to the same endpoint, so several
+    // trucks would stack into an unreadable blob at a busy plant. Fan the
+    // arrived ones back down their own lane instead of overlapping them.
+    const arrivedAt = {};
+    DSH.pulses.forEach(p => {
+      if(!p.el) return;
+      const plan = p.a.plan;
+      if(!plan || plan.progress == null){
+        // no pickup date on the record — park it at the origin and say so
+        p.el.setAttribute('opacity', '0.28');
+        dshPlaceTruck(p.el, p.a, 0.02);
+        return;
+      }
+      let u = plan.progress;
+      if(u >= 0.97){
+        const key = p.a.x1.toFixed(0) + ',' + p.a.y1.toFixed(0);
+        const nth = (arrivedAt[key] = (arrivedAt[key] || 0) + 1) - 1;
+        u = Math.max(0.55, 0.97 - nth * 0.06);
+      }
+      p.el.setAttribute('opacity', '1');
+      dshPlaceTruck(p.el, p.a, u);
+    });
+    return;   // no animation loop in this view
+  }
+
+  if(DSH.rafOn) return;
+  DSH.rafOn = true;
+  (function frame(){
+    if(!document.getElementById('dsh-pulses')){ DSH.rafOn = false; return; }
+    // In the In-Transit view the trucks are a position report, not an
+    // animation — the loop must leave them exactly where progress put them.
+    if(DSH.playing && !reduced && DSH.view !== 'transit'){
+      DSH.pulses.forEach(p => {
+        if(!p.el) return;
+        p.t += p.sp * DSH.speed; if(p.t > 1) p.t = 0;
+        dshPlaceTruck(p.el, p.a, p.t);
+        p.el.setAttribute('opacity', (p.t < .06 || p.t > .94) ? '0.15' : '0.95');
+      });
+    }
+    requestAnimationFrame(frame);
+  })();
+}
+
+/* ── AUTO BRIEF ─────────────────────────────────────────
+   The system walks itself through each plant and reports
+   what it sees. Every figure is read from the ledger.
+═══════════════════════════════════════════════════════ */
+function dshBriefBuild(){
+  DSH.briefIdx = 0;
+  dshBriefRender();
+  dshBriefSchedule();
+}
+function dshBriefSchedule(){
+  clearTimeout(DSH._briefT);
+  if(!DSH.briefOn || !DSH.locs || DSH.locs.length < 2) return;
+  DSH._briefT = setTimeout(() => {
+    DSH.briefIdx = (DSH.briefIdx + 1) % DSH.locs.length;
+    dshBriefRender();
+    dshBriefSchedule();
+  }, 5200 / (DSH.speed || 1));
+}
+function dshToggleBrief(){
+  DSH.briefOn = !DSH.briefOn;
+  const b = document.getElementById('dsh-brief-toggle');
+  if(b){ b.classList.toggle('paused', !DSH.briefOn); document.getElementById('dsh-brief-state').textContent = DSH.briefOn ? 'Live' : 'Paused'; }
+  if(DSH.briefOn) dshBriefSchedule(); else clearTimeout(DSH._briefT);
+}
+function dshBriefGo(i){ DSH.briefIdx = i; dshBriefRender(); dshBriefSchedule(); }
+
+function dshBriefRender(){
+  const body = document.getElementById('dsh-brief-body');
+  const ft   = document.getElementById('dsh-brief-ft');
+  const scan = document.getElementById('dsh-scan');
+  if(!body) return;
+
+  if(!DSH.locs || !DSH.locs.length){
+    body.innerHTML = '<div class="dsh-bnote">No lanes match the current filters.</div>';
+    if(ft) ft.innerHTML = ''; if(scan) scan.classList.remove('on');
+    return;
+  }
+  // In the In-Transit view the rail stops being a tour and becomes a
+  // position report: every load still on the road, sorted by urgency.
+  if(DSH.view === 'transit'){ dshRenderManifest(body, ft, scan); return; }
+
+  const l = DSH.locs[DSH.briefIdx % DSH.locs.length];
+  const pk = dshPlantKey(l.name);
+  const p  = (pk && typeof PLANTS !== 'undefined') ? PLANTS[pk] : null;
+
+  // origins feeding this plant, biggest first
+  const feed = {};
+  l.rows.forEach(r => {
+    const g = dshGeo(r.s.puAddr);
+    const key = g ? ((g.city ? g.city.replace(/\b\w/g,c=>c.toUpperCase()) + ', ' : '') + (g.st||'').toUpperCase()) : 'Unlocated origin';
+    if(!feed[key]) feed[key] = {n:0, cost:0, carrier:r.s.approved};
+    feed[key].n++; feed[key].cost += r.cost;
+  });
+  const feeds = Object.entries(feed).sort((a,b)=>b[1].cost-a[1].cost).slice(0,4);
+  const pallets = l.rows.reduce((a,r)=>a+(r.s.pallets||0),0);
+
+  body.classList.remove('swap'); void body.offsetWidth; body.classList.add('swap');
+  body.innerHTML =
+      '<div class="dsh-bplant">' + dshEsc(l.name) + '</div>'
+    + '<div class="dsh-baddr">' + dshEsc(p ? p.address : 'No plant address on file') + '</div>'
+    + '<div class="dsh-bfig">'
+      + '<div><div class="fl">Freight</div><div class="fv">' + dshMoney(l.cost) + '</div></div>'
+      + '<div><div class="fl">Loads</div><div class="fv">' + l.rows.length + '</div></div>'
+      + '<div><div class="fl">Savings</div><div class="fv' + (l.save>0?' g':'') + '">' + (l.save>0?dshMoney(l.save):'—') + '</div></div>'
+    + '</div>'
+    + '<div class="dsh-bline"></div>'
+    + '<div class="fl" style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:#c0b2ae;margin-bottom:6px;">Feeding this plant</div>'
+    + feeds.map(([city,v]) =>
+        '<div class="dsh-borg"><span class="od" style="background:' + dshCar(v.carrier).color + '"></span>'
+      + '<span class="oc">' + dshEsc(city) + '</span>'
+      + '<span class="ov">' + v.n + ' · ' + dshMoney(v.cost) + '</span></div>').join('')
+    + '<div class="dsh-bline"></div>'
+    + '<div class="dsh-bnote">'
+      + (l.top ? cmdShortNameSafe(l.top) + ' carries most of this lane. ' : '')
+      + pallets + ' pallet' + (pallets===1?'':'s') + ' delivered'
+      + (p && p.policy ? ' · ' + dshEsc(p.policy) : '') + '.'
+    + '</div>';
+
+  if(ft) ft.innerHTML = DSH.locs.map((x,i) =>
+    '<div class="dsh-bdot' + (i === DSH.briefIdx % DSH.locs.length ? ' on' : '') + '"'
+    + ' onclick="dshBriefGo(' + i + ')" title="' + dshEsc(x.name) + '"></div>').join('');
+
+  // move the focus glow to the plant being briefed
+  if(scan && l.geo){
+    scan.style.setProperty('--fx', (l.geo.pt[0] / DSH_MAP.W * 100).toFixed(1) + '%');
+    scan.style.setProperty('--fy', (l.geo.pt[1] / DSH_MAP.H * 100).toFixed(1) + '%');
+    scan.classList.add('on');
+  }
+  document.querySelectorAll('#panel-dashboard .dsh-plant').forEach(el =>
+    el.classList.toggle('focus', el.dataset.plant === l.name));
+}
+function cmdShortNameSafe(n){ return dshEsc(dshCar(n).short); }
+
+/* origin-state filter — a dimension the lane board never had */
+
+/* ── IN-TRANSIT MANIFEST ────────────────────────────────
+   Answers the only question that matters in this view:
+   what is still out there, and is it going to be late?
+═══════════════════════════════════════════════════════ */
+function dshRenderManifest(body, ft, scan){
+  if(scan) scan.classList.remove('on');
+  if(ft) ft.innerHTML = '';
+
+  const legs = (DSH.arcs || []).map((a, laneIdx) => {
+    const isTr = a.kind === 'tr';
+    return {
+      a, isTr, laneIdx, plan: a.plan,
+      ref:   isTr ? ('Transfer ' + (a.t.ref || '—')) : ('PO ' + (a.r.s.po || '#' + a.r.s.id)),
+      who:   isTr ? (a.fromLoc + ' → ' + a.toLoc) : ((a.r.s.vendor || '—') + ' → ' + a.l.name),
+      color: a.color,
+      amt:   isTr ? (a.t.approvedAmt || 0) : a.r.cost
+    };
+  });
+
+  if(!legs.length){
+    body.innerHTML = '<div class="dsh-bnote">Nothing is in transit right now — every load in scope has been delivered or is still pending.</div>';
+    return;
+  }
+
+  // late first, then whatever lands soonest
+  legs.sort((x,y) => {
+    const lx = x.plan && x.plan.late ? 1 : 0, ly = y.plan && y.plan.late ? 1 : 0;
+    if(lx !== ly) return ly - lx;
+    const dx = x.plan && x.plan.daysLeft != null ? x.plan.daysLeft :  999;
+    const dy = y.plan && y.plan.daysLeft != null ? y.plan.daysLeft :  999;
+    return dx - dy;
+  });
+
+  const late    = legs.filter(l => l.plan && l.plan.late && l.plan.daysLeft < 0).length;
+  const today   = legs.filter(l => l.plan && !l.plan.late && l.plan.daysLeft <= 0).length;
+  const noDate  = legs.filter(l => !l.plan || l.plan.progress == null).length;
+  const miles   = legs.reduce((n,l) => n + ((l.plan && l.plan.miles) || 0), 0);
+
+  body.classList.remove('swap'); void body.offsetWidth; body.classList.add('swap');
+  body.innerHTML =
+      '<div class="dsh-bplant">On the road</div>'
+    + '<div class="dsh-baddr">' + legs.length + ' load' + (legs.length===1?'':'s') + ' in transit · '
+      + miles.toLocaleString('en-US') + ' road miles</div>'
+    + '<div class="dsh-bfig">'
+      + '<div><div class="fl">Arriving today</div><div class="fv">' + today + '</div></div>'
+      + '<div><div class="fl">Overdue</div><div class="fv" style="' + (late ? 'color:#b91c1c' : '') + '">' + late + '</div></div>'
+      + '<div><div class="fl">No PU date</div><div class="fv">' + noDate + '</div></div>'
+    + '</div>'
+    + '<div class="dsh-bline"></div>'
+    + '<div class="dsh-manifest">'
+    + legs.slice(0, 12).map(l => {
+        const pl = l.plan || {};
+        const pct = pl.progress != null ? Math.round(pl.progress * 100) : null;
+        let state = 'No pickup date', cls = 'na';
+        if(pl.late && pl.daysLeft < 0){
+          // past its due date — flag it whether or not progress could be computed
+          state = Math.abs(pl.daysLeft) + 'd overdue'; cls = 'late';
+        } else if(pl.progress != null){
+          if(pl.daysLeft <= 0){ state = 'Arrives today'; cls = 'now'; }
+          else { state = pl.daysLeft + 'd left'; cls = 'ok'; }
+        } else if(pl.daysLeft != null && pl.daysLeft <= 0){
+          state = 'Arrives today'; cls = 'now';
+        }
+        return '<div class="dsh-leg ' + cls + '" data-lane="' + l.laneIdx + '"'
+          + ' onclick="dshFocusLeg(' + l.laneIdx + ')"'
+          + ' onmouseenter="dshHoverLeg(' + l.laneIdx + ',true)"'
+          + ' onmouseleave="dshHoverLeg(' + l.laneIdx + ',false)"'
+          + ' title="Click to pick this load out on the map">'
+          + '<div class="lg-top"><span class="lg-ref">' + dshEsc(l.ref) + '</span>'
+          + '<span class="lg-state">' + state + '</span></div>'
+          + '<div class="lg-who">' + dshEsc(l.who) + '</div>'
+          + '<div class="lg-bar"><i style="width:' + (pct == null ? 0 : pct) + '%;background:' + l.color + '"></i></div>'
+          + '<div class="lg-foot">'
+            + (pl.miles != null ? pl.miles.toLocaleString('en-US') + ' mi · ' : '')
+            + (pl.days != null ? pl.days + 'd ' + pl.mode : '')
+            + (pl.eta ? ' · ' + (pl.estimated ? 'ETA ' : 'Due ') + dshFmtShort(pl.eta) : '')
+            + (pct != null ? ' · ' + pct + '%' : '')
+          + '</div></div>';
+      }).join('')
+    + '</div>'
+    + (legs.length > 12 ? '<div class="dsh-bnote" style="margin-top:8px;">+ ' + (legs.length - 12) + ' more on the board</div>' : '')
+    + '<div class="dsh-bnote" style="margin-top:10px;">FTL is timed at 550 mi/day door to door. LTL follows published carrier service bands in business days. A delivery date on the record always overrides the estimate.</div>';
+}
+
+
+/* Manifest <-> map: hovering a leg picks its lane out of the network, and
+   clicking locks that highlight so it survives moving the mouse away. */
+function dshHoverLeg(i, on){
+  if(DSH.legLock != null && DSH.legLock !== i) return;
+  dshHighlightLane(on ? i : (DSH.legLock != null ? DSH.legLock : null));
+}
+function dshFocusLeg(i){
+  DSH.legLock = (DSH.legLock === i) ? null : i;
+  dshHighlightLane(DSH.legLock);
+  document.querySelectorAll('#panel-dashboard .dsh-leg').forEach(el => {
+    el.classList.toggle('picked', DSH.legLock != null && +el.dataset.lane === DSH.legLock);
+  });
+}
+function dshHighlightLane(i){
+  const lanes  = document.querySelectorAll('#panel-dashboard .dsh-lane');
+  const trucks = document.querySelectorAll('#panel-dashboard .dsh-pulse');
+  trucks.forEach(t => t.classList.remove('spot'));
+  if(i == null){
+    lanes.forEach(p => { p.classList.remove('faded'); p.classList.remove('hot'); });
+    return;
+  }
+  lanes.forEach(p => p.classList.add('faded'));
+  const el = document.getElementById('dsh-lane-' + i);
+  if(el){ el.classList.remove('faded'); el.classList.add('hot'); }
+  const pIdx = (DSH.pulses || []).findIndex(p => p.a === DSH.arcs[i]);
+  if(pIdx >= 0){
+    const t = document.getElementById('dsh-pl-' + pIdx);
+    if(t) t.classList.add('spot');
+  }
+}
+
+function dshSetOriginState(st){
+  DSH.originState = (DSH.originState === st) ? null : st;
+  renderDashboard();
+}
+
+/* ── filter chips ───────────────────────────────────── */
+function dshBuildChips(){
+  const months = dshMonths();
+  document.getElementById('dsh-months').innerHTML =
+    months.map(m => '<span class="dsh-chip' + (DSH.month===m?' on':'') + '" onclick="dshSetMonth(\'' + m + '\')">' + dshMonthLabel(m) + '</span>').join(' ')
+    || '<span style="font-size:11.5px;color:#a8a29e;">No dated shipments</span>';
+
+  const used = [...new Set(shipments.map(s => s.approved).filter(Boolean))];
+  document.getElementById('dsh-carriers').innerHTML = used.map(c => {
+    const ci = dshCar(c), on = DSH.carrier === c;
+    const style = on ? 'background:' + ci.color + ';border-color:' + ci.color + ';color:#fff;'
+                     : 'border-color:' + ci.color + '55;color:' + ci.color + ';';
+    return '<span class="dsh-chip carrier' + (on?' on':'') + '" style="' + style + '" onclick="dshSetCarrier(\'' + dshEsc(c).replace(/'/g,"\\'") + '\')">' + dshEsc(ci.short) + '</span>';
+  }).join(' ') || '<span style="font-size:11.5px;color:#a8a29e;">No carriers yet</span>';
+
+  const btn = document.getElementById('dsh-reset');
+  const active = !!(DSH.month || DSH.carrier || DSH.plant || DSH.originState);
+  btn.disabled = !active;
+  btn.textContent = active ? 'Clear filters' : 'No filters active';
+  const ap = document.getElementById('dsh-allplants');
+  if(ap) ap.classList.toggle('on', DSH.showEmpty);
+}
+
+/* ── KPIs ───────────────────────────────────────────── */
+function dshBuildKpis(){
+  const rows = dshFiltered();
+  const cost = rows.reduce((a,r)=>a+r.cost,0);
+  const save = rows.reduce((a,r)=>a+r.save,0);
+  const pal  = rows.reduce((a,r)=>a+(r.s.pallets||0),0);
+  const perPal = pal > 0 ? cost/pal : 0;
+  const scope = [DSH.month && dshMonthLabel(DSH.month), DSH.carrier && dshCar(DSH.carrier).short, DSH.plant]
+    .filter(Boolean).join(' · ') || 'All shipments';
+
+  const kpis = [
+    {c:'',  l:'Freight cost',   v:dshMoney(cost),  s:scope},
+    {c:'g', l:'Savings',        v:dshMoney(save),  s:save>0 ? 'carrier beat vendor rate' : 'no scored savings in scope'},
+    {c:'b', l:'Loads',          v:String(rows.length), s:pal + ' pallets total'},
+    {c:'a', l:'Cost per pallet',v:pal>0?dshMoney2(perPal):'—', s:pal>0?'blended across modes':'no pallet data'}
+  ];
+  document.getElementById('dsh-kpis').innerHTML = kpis.map(k =>
+    '<div class="dsh-kpi ' + k.c + '"><div class="kl">' + k.l + '</div><div class="kv">' + k.v + '</div><div class="ks">' + dshEsc(k.s) + '</div></div>'
+  ).join('');
+}
+
+/* ── battery graph ──────────────────────────────────── */
+function dshBuildBatteries(){
+  const months = dshMonths();
+  const host = document.getElementById('dsh-batts');
+  const base = dshRows().filter(r => !DSH.carrier || r.s.approved === DSH.carrier)
+                        .filter(r => !DSH.plant   || r.loc === DSH.plant);
+  const cost = m => base.filter(r => r.month === m).reduce((a,r)=>a+r.cost,0);
+  const max = Math.max(...months.map(cost), 1);
+  const total = base.reduce((a,r)=>a+r.cost,0);
+  document.getElementById('dsh-batt-tot').textContent = dshMoney(total) + ' total';
+
+  if(!months.length){ host.innerHTML = '<p style="font-size:12px;color:#a8a29e;">No dated shipments yet.</p>'; return; }
+
+  host.innerHTML = months.map(m => {
+    const mrows = base.filter(r => r.month === m);
+    const tot = mrows.reduce((a,r)=>a+r.cost,0);
+    const fillPct = (tot / max) * 100;
+    const byC = {};
+    mrows.forEach(r => { if(r.s.approved) byC[r.s.approved] = (byC[r.s.approved]||0) + r.cost; });
+    const cells = Object.entries(byC).sort((a,b)=>b[1]-a[1]).map(([c,v]) => {
+      const h = tot > 0 ? (v/tot) * fillPct : 0;
+      return '<div class="cell" style="height:' + h.toFixed(2) + '%;background:' + dshCar(c).color + '" title="' + dshEsc(dshCar(c).short) + ': ' + dshMoney(v) + '"></div>';
+    }).join('');
+    const on = DSH.month === m, faded = DSH.month && !on;
+    return '<div class="dsh-batt' + (on?' on':'') + (faded?' faded':'') + '" onclick="dshSetMonth(\'' + m + '\')" title="Click to filter by ' + dshMonthLabel(m) + '">'
+         + '<span class="mv">' + (tot>0?dshMoney(tot):'—') + '</span>'
+         + '<div class="cap"></div><div class="shell">' + cells + '</div>'
+         + '<span class="ml">' + dshMonthLabel(m) + '</span></div>';
+  }).join('');
+}
+
+/* ── donut ──────────────────────────────────────────── */
+function dshBuildDonut(){
+  const base = dshRows().filter(r => (!DSH.month || r.month === DSH.month) && (!DSH.plant || r.loc === DSH.plant));
+  const mix = {};
+  base.forEach(r => { if(r.s.approved) mix[r.s.approved] = (mix[r.s.approved]||0) + 1; });
+  const arr = Object.entries(mix).sort((a,b)=>b[1]-a[1]);
+  const n = arr.reduce((a,x)=>a+x[1],0);
+  document.getElementById('dsh-mix-n').textContent = n + ' load' + (n===1?'':'s');
+
+  const donut = document.getElementById('dsh-donut');
+  if(!arr.length){
+    donut.innerHTML = '';
+    document.getElementById('dsh-mixlist').innerHTML = '<p style="font-size:12px;color:#a8a29e;">No carrier data in scope.</p>';
+    return;
+  }
+  const R = 46, C = 2*Math.PI*R;
+  let off = 0, out = '';
+  arr.forEach(([c,v]) => {
+    const frac = v/n, ci = dshCar(c);
+    const faded = DSH.carrier && DSH.carrier !== c;
+    out += '<circle class="dsh-arc' + (faded?' faded':'') + '" cx="62" cy="62" r="' + R + '" fill="none" stroke="' + ci.color + '"'
+        +  ' stroke-width="16" stroke-dasharray="' + Math.max(frac*C - 3, 0).toFixed(2) + ' ' + C.toFixed(2) + '"'
+        +  ' stroke-dashoffset="' + (-off*C).toFixed(2) + '" transform="rotate(-90 62 62)"'
+        +  ' onclick="dshSetCarrier(\'' + dshEsc(c).replace(/'/g,"\\'") + '\')"><title>' + dshEsc(dshCar(c).short) + ' — ' + v + ' loads</title></circle>';
+    off += frac;
+  });
+  out += '<text x="62" y="59" text-anchor="middle" fill="#450a0a" font-family="Aptos,Inter,sans-serif" font-size="21" font-weight="800">' + n + '</text>';
+  out += '<text x="62" y="73" text-anchor="middle" fill="#a8a29e" font-size="7.5" letter-spacing="1.5">LOADS</text>';
+  donut.innerHTML = out;
+
+  document.getElementById('dsh-mixlist').innerHTML = arr.map(([c,v]) => {
+    const ci = dshCar(c);
+    const spend = base.filter(r => r.s.approved === c).reduce((a,r)=>a+r.cost,0);
+    const on = DSH.carrier === c, faded = DSH.carrier && !on;
+    return '<div class="dsh-mrow' + (on?' on':'') + (faded?' faded':'') + '" onclick="dshSetCarrier(\'' + dshEsc(c).replace(/'/g,"\\'") + '\')">'
+         + '<span class="sw" style="background:' + ci.color + '"></span>'
+         + '<span class="mn">' + dshEsc(ci.short) + '</span>'
+         + '<span class="mv">' + v + ' · ' + dshMoney(spend) + '</span></div>';
+  }).join('');
+}
+
+/* ── warehouse drawer ───────────────────────────────── */
+function dshBuildDrawer(){
+  const el = document.getElementById('dsh-drawer');
+  if(!DSH.plant){ el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = 'block';
+
+  const pk = dshPlantKey(DSH.plant);
+  const p = (pk && typeof PLANTS !== 'undefined') ? PLANTS[pk] : null;
+  const rows = dshRows().filter(r => r.loc === DSH.plant)
+                        .filter(r => (!DSH.month || r.month === DSH.month) && (!DSH.carrier || r.s.approved === DSH.carrier));
+  const cost = rows.reduce((a,r)=>a+r.cost,0);
+  const save = rows.reduce((a,r)=>a+r.save,0);
+  const pal  = rows.reduce((a,r)=>a+(r.s.pallets||0),0);
+  const mix = {}; rows.forEach(r => { if(r.s.approved) mix[r.s.approved] = (mix[r.s.approved]||0)+1; });
+  const topC = Object.entries(mix).sort((a,b)=>b[1]-a[1])[0];
+
+  const recent = [...rows].sort((a,b) => String(b.s.date||'').localeCompare(String(a.s.date||''))).slice(0,6);
+
+  const contacts = (p && p.contacts) ? p.contacts.map(c =>
+    '<div class="dsh-ct"><div class="av">' + dshEsc(c.initials) + '</div><div><div class="cn">' + dshEsc(c.name) + '</div><div class="ce">' + dshEsc(c.email) + '</div></div></div>').join('') : '';
+
+  el.innerHTML =
+    '<div class="dsh-dhd">'
+    + '<div><div class="dn">' + dshEsc(DSH.plant) + (p ? '' : ' <span style="font-size:11px;font-weight:600;color:#a8a29e;">· legacy destination, no plant record</span>') + '</div>'
+    + '<div class="da">' + dshEsc(p ? p.address : 'This destination predates the plant list and has no address on file.') + '</div></div>'
+    + '<button class="btn btn-outline btn-sm" onclick="dshSetPlant(null)">Close</button>'
+    + '</div>'
+    + '<div class="dsh-dbody">'
+      + '<div class="dsh-dsec"><h4>Plant details</h4>'
+        + (p ? '<div class="dsh-drow"><span class="dk">Phone</span><span class="dv">' + dshEsc(p.phone) + '</span></div>'
+             + '<div class="dsh-drow"><span class="dk">Receiving hours</span><span class="dv">' + dshEsc(p.hours) + '</span></div>'
+             + '<div class="dsh-drow"><span class="dk">Policy</span><span class="dv"><span class="dsh-badge ' + (p.policyColor==='badge-gold'?'gold':'green') + '">' + dshEsc(p.policy) + '</span></span></div>'
+           : '<p style="font-size:12px;color:#a8a29e;line-height:1.6;">No contact, hours or receiving policy on file for this destination.</p>')
+        + '<div class="dsh-drow"><span class="dk">Loads in scope</span><span class="dv">' + rows.length + '</span></div>'
+        + '<div class="dsh-drow"><span class="dk">Freight cost</span><span class="dv">' + dshMoney2(cost) + '</span></div>'
+        + '<div class="dsh-drow"><span class="dk">Savings</span><span class="dv" style="color:#15803d;">' + (save>0?dshMoney2(save):'cost only') + '</span></div>'
+        + '<div class="dsh-drow"><span class="dk">Pallets</span><span class="dv">' + pal + '</span></div>'
+        + '<div class="dsh-drow"><span class="dk">Primary carrier</span><span class="dv">' + (topC ? dshEsc(dshCar(topC[0]).short) + ' (' + topC[1] + ')' : '—') + '</span></div>'
+        + (contacts ? '<h4 style="margin-top:16px;">Receiving contacts</h4><div class="dsh-contacts">' + contacts + '</div>' : '')
+      + '</div>'
+      + '<div class="dsh-dsec"><h4>Recent loads to this plant</h4><div class="dsh-pos">'
+        + (recent.length ? recent.map(r =>
+            '<div class="dsh-po"><span class="pp">PO ' + dshEsc(r.s.po||'—') + '</span>'
+          + '<span class="pv">' + dshEsc(r.s.vendor||'—') + ' · ' + dshEsc(dshCar(r.s.approved).short) + '</span>'
+          + '<span class="pa">' + dshMoney2(r.cost) + '</span></div>').join('')
+          : '<p style="font-size:12px;color:#a8a29e;">No loads match the current filters.</p>')
+        + '</div></div>'
+    + '</div>';
+}
+
+/* ── master render ──────────────────────────────────── */
+function renderDashboard(){
+  if(typeof shipments === 'undefined') return;
+  dshBuildChips();
+  dshBuildKpis();
+  dshBuildBoard();
+  dshBuildDrawer();
+  dshBuildBatteries();
+  dshBuildDonut();
+}
+
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════════

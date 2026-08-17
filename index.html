@@ -1326,6 +1326,23 @@ body.dashboard-active .nav-tab.active { color:#9b1c1c; border-bottom-color:#dc26
 #panel-dashboard .dsh-pulse{ transition:filter .18s var(--ease); }
 #panel-dashboard .dsh-pulse.spot{ filter:drop-shadow(0 0 6px rgba(155,28,28,.85)); }
 
+
+/* A truck holding its position on the board is still a truck under way: the
+   inner group gets a light engine shake while the outer group — the one that
+   carries the map position — is never touched. */
+@keyframes dshIdle{
+  0%,100%{ transform: translate(0,0); }
+  25%    { transform: translate(.12px,-.42px); }
+  50%    { transform: translate(0,-.1px); }
+  75%    { transform: translate(-.12px,-.38px); }
+}
+#panel-dashboard .dsh-pulse .tk{ animation: dshIdle .78s ease-in-out infinite; will-change: transform; }
+#panel-dashboard .dsh-pulse.late .tk{ animation-duration: 1.5s; }
+@media (prefers-reduced-motion: reduce){
+  #panel-dashboard .dsh-pulse .tk{ animation: none; }
+  #panel-dashboard .tk-wheel, #panel-dashboard .tk-puff, #panel-dashboard .tk-draught{ display: none; }
+}
+
 @media print{ #panel-dashboard{ display:none !important; } }
 @media (max-width:1100px){
   #panel-dashboard .dsh-grid2{ grid-template-columns:1fr; }
@@ -8443,9 +8460,43 @@ function dshTruckSvg(color, kind){
     ? '<rect x="-8.8" y="-5.2" width="10.6" height="6.8" rx="1.3" fill="#fffdfc" stroke="' + color + '" stroke-width="1.4"/>'
     : '<rect x="-8.8" y="-5.2" width="10.6" height="6.8" rx="1.3" fill="' + color + '" stroke="#fffdfc" stroke-width=".9"/>';
   const cab = '<path d="M2.2 -3.4 h3.4 l2.7 2.5 v2.5 h-6.1 z" fill="' + color + '" stroke="#fffdfc" stroke-width=".7"/>';
-  const wheels = '<circle cx="-4.8" cy="2.6" r="1.7" fill="#292524" stroke="#fffdfc" stroke-width=".6"/>'
-               + '<circle cx="5.4" cy="2.6" r="1.7" fill="#292524" stroke="#fffdfc" stroke-width=".6"/>';
-  return trailer + cab + wheels;
+
+  // Rolling wheel: a dark tyre plus a cross-spoke that spins. The rotation is
+  // SMIL rather than CSS so it does not fight the positional transform the
+  // parent <g> carries, and it needs no transform-origin support.
+  const wheel = cx =>
+      '<g class="tk-wheel">'
+    +   '<circle cx="' + cx + '" cy="2.6" r="1.7" fill="#292524" stroke="#fffdfc" stroke-width=".6"/>'
+    +   '<g>'
+    +     '<path d="M' + cx + ' 1.35 V3.85 M' + (cx - 1.25) + ' 2.6 H' + (cx + 1.25) + '"'
+    +       ' stroke="#786f69" stroke-width=".38" stroke-linecap="round"/>'
+    +     '<animateTransform attributeName="transform" type="rotate"'
+    +       ' from="0 ' + cx + ' 2.6" to="360 ' + cx + ' 2.6" dur="0.5s" repeatCount="indefinite"/>'
+    +   '</g>'
+    + '</g>';
+
+  // Exhaust drifting back off the stack, and two short draught lines. Together
+  // they say "under way" even when the truck is holding its position.
+  const puff = (delay, r) =>
+      '<circle class="tk-puff" cy="-5.6" r="' + r + '" fill="#c2b7b1" opacity="0">'
+    +   '<animate attributeName="cx" values="-8.4;-12.4" dur="1.5s" begin="' + delay + 's" repeatCount="indefinite"/>'
+    +   '<animate attributeName="cy" values="-5.6;-8" dur="1.5s" begin="' + delay + 's" repeatCount="indefinite"/>'
+    +   '<animate attributeName="r" values="' + r + ';' + (r * 1.8).toFixed(2) + '" dur="1.5s" begin="' + delay + 's" repeatCount="indefinite"/>'
+    +   '<animate attributeName="opacity" values="0;.3;0" dur="1.5s" begin="' + delay + 's" repeatCount="indefinite"/>'
+    + '</circle>';
+
+  const draught = (y, delay) =>
+      '<line class="tk-draught" x1="-9.8" y1="' + y + '" x2="-12.6" y2="' + y + '"'
+    +   ' stroke="' + color + '" stroke-width=".55" stroke-linecap="round" opacity="0">'
+    +   '<animate attributeName="opacity" values="0;.45;0" dur="0.9s" begin="' + delay + 's" repeatCount="indefinite"/>'
+    +   '<animate attributeName="x2" values="-11.4;-14.2" dur="0.9s" begin="' + delay + 's" repeatCount="indefinite"/>'
+    + '</line>';
+
+  return '<g class="tk">'
+       +   draught(-2.9, 0) + draught(0.2, 0.45)
+       +   puff(0, 0.5) + puff(0.75, 0.38)
+       +   trailer + cab + wheel(-4.8) + wheel(5.4)
+       + '</g>';
 }
 
 function dshBuildBoard(){

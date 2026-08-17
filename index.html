@@ -1330,17 +1330,11 @@ body.dashboard-active .nav-tab.active { color:#9b1c1c; border-bottom-color:#dc26
 /* A truck holding its position on the board is still a truck under way: the
    inner group gets a light engine shake while the outer group — the one that
    carries the map position — is never touched. */
-@keyframes dshIdle{
-  0%,100%{ transform: translate(0,0); }
-  25%    { transform: translate(.12px,-.42px); }
-  50%    { transform: translate(0,-.1px); }
-  75%    { transform: translate(-.12px,-.38px); }
-}
-#panel-dashboard .dsh-pulse .tk{ animation: dshIdle .78s ease-in-out infinite; will-change: transform; }
-#panel-dashboard .dsh-pulse.late .tk{ animation-duration: 1.5s; }
+/* The shake now lives on the element as SMIL (see dshTruckSvg) so a stylesheet
+   cannot silently defeat it. Reduced motion is honoured by stripping the
+   animated parts out in JS instead. */
 @media (prefers-reduced-motion: reduce){
-  #panel-dashboard .dsh-pulse .tk{ animation: none; }
-  #panel-dashboard .tk-wheel, #panel-dashboard .tk-puff, #panel-dashboard .tk-draught{ display: none; }
+  #panel-dashboard .tk-puff, #panel-dashboard .tk-draught{ display: none; }
 }
 
 @media print{ #panel-dashboard{ display:none !important; } }
@@ -8468,8 +8462,8 @@ function dshTruckSvg(color, kind){
       '<g class="tk-wheel">'
     +   '<circle cx="' + cx + '" cy="2.6" r="1.7" fill="#292524" stroke="#fffdfc" stroke-width=".6"/>'
     +   '<g>'
-    +     '<path d="M' + cx + ' 1.35 V3.85 M' + (cx - 1.25) + ' 2.6 H' + (cx + 1.25) + '"'
-    +       ' stroke="#786f69" stroke-width=".38" stroke-linecap="round"/>'
+    +     '<path d="M' + cx + ' 1.2 V4 M' + (cx - 1.4) + ' 2.6 H' + (cx + 1.4) + '"'
+    +       ' stroke="#b8ada7" stroke-width=".62" stroke-linecap="round"/>'
     +     '<animateTransform attributeName="transform" type="rotate"'
     +       ' from="0 ' + cx + ' 2.6" to="360 ' + cx + ' 2.6" dur="0.5s" repeatCount="indefinite"/>'
     +   '</g>'
@@ -8478,25 +8472,47 @@ function dshTruckSvg(color, kind){
   // Exhaust drifting back off the stack, and two short draught lines. Together
   // they say "under way" even when the truck is holding its position.
   const puff = (delay, r) =>
-      '<circle class="tk-puff" cy="-5.6" r="' + r + '" fill="#c2b7b1" opacity="0">'
-    +   '<animate attributeName="cx" values="-8.4;-12.4" dur="1.5s" begin="' + delay + 's" repeatCount="indefinite"/>'
-    +   '<animate attributeName="cy" values="-5.6;-8" dur="1.5s" begin="' + delay + 's" repeatCount="indefinite"/>'
-    +   '<animate attributeName="r" values="' + r + ';' + (r * 1.8).toFixed(2) + '" dur="1.5s" begin="' + delay + 's" repeatCount="indefinite"/>'
-    +   '<animate attributeName="opacity" values="0;.3;0" dur="1.5s" begin="' + delay + 's" repeatCount="indefinite"/>'
+      '<circle class="tk-puff" cy="-5.6" r="' + r + '" fill="#b3a8a2" opacity="0">'
+    +   '<animate attributeName="cx" values="-8.4;-13.6" dur="1.1s" begin="' + delay + 's" repeatCount="indefinite"/>'
+    +   '<animate attributeName="cy" values="-5.6;-9.4" dur="1.1s" begin="' + delay + 's" repeatCount="indefinite"/>'
+    +   '<animate attributeName="r" values="' + r + ';' + (r * 2.4).toFixed(2) + '" dur="1.1s" begin="' + delay + 's" repeatCount="indefinite"/>'
+    +   '<animate attributeName="opacity" values="0;.55;0" dur="1.1s" begin="' + delay + 's" repeatCount="indefinite"/>'
     + '</circle>';
 
   const draught = (y, delay) =>
-      '<line class="tk-draught" x1="-9.8" y1="' + y + '" x2="-12.6" y2="' + y + '"'
-    +   ' stroke="' + color + '" stroke-width=".55" stroke-linecap="round" opacity="0">'
-    +   '<animate attributeName="opacity" values="0;.45;0" dur="0.9s" begin="' + delay + 's" repeatCount="indefinite"/>'
-    +   '<animate attributeName="x2" values="-11.4;-14.2" dur="0.9s" begin="' + delay + 's" repeatCount="indefinite"/>'
+      '<line class="tk-draught" x1="-9.6" y1="' + y + '" x2="-14" y2="' + y + '"'
+    +   ' stroke="' + color + '" stroke-width="1" stroke-linecap="round" opacity="0">'
+    +   '<animate attributeName="opacity" values="0;.85;0" dur="0.62s" begin="' + delay + 's" repeatCount="indefinite"/>'
+    +   '<animate attributeName="x1" values="-9.6;-13.5" dur="0.62s" begin="' + delay + 's" repeatCount="indefinite"/>'
+    +   '<animate attributeName="x2" values="-14;-19" dur="0.62s" begin="' + delay + 's" repeatCount="indefinite"/>'
     + '</line>';
 
-  return '<g class="tk">'
+  // Road bounce and body rock. Driven by SMIL, not CSS, for the same reason as
+  // the wheels: it composes cleanly with the positional transform on the parent
+  // and cannot be reached by any stylesheet. Amplitudes are sized for the glyph
+  // as it actually renders on the map (~13px wide), not for a zoomed mockup —
+  // a half-unit shake there is a third of a pixel and reads as nothing.
+  const shake =
+      '<animateTransform attributeName="transform" type="translate" additive="sum"'
+    +   ' values="0,0; .35,-1.5; 0,-.3; -.35,-1.4; 0,0" dur="0.46s" repeatCount="indefinite"/>'
+    + '<animateTransform attributeName="transform" type="rotate" additive="sum"'
+    +   ' values="0; -2.6; 0; 2.6; 0" dur="0.46s" repeatCount="indefinite"/>';
+
+  return '<g class="tk">' + shake
        +   draught(-2.9, 0) + draught(0.2, 0.45)
-       +   puff(0, 0.5) + puff(0.75, 0.38)
+       +   puff(0, 0.8) + puff(0.55, 0.6)
        +   trailer + cab + wheel(-4.8) + wheel(5.4)
        + '</g>';
+}
+
+/* The same glyph with every animation node removed, plus the exhaust and
+   speed lines dropped. Used for the legend key, which must sit still. */
+function dshStillTruck(color, kind){
+  return dshTruckSvg(color, kind)
+    .replace(/<animateTransform[^>]*\/>/g, '')
+    .replace(/<animate\b[^>]*\/>/g, '')
+    .replace(/<circle class="tk-puff"[\s\S]*?<\/circle>/g, '')
+    .replace(/<line class="tk-draught"[\s\S]*?<\/line>/g, '');
 }
 
 function dshBuildBoard(){
@@ -8757,9 +8773,9 @@ function dshBuildBoard(){
   // legend — how to read the two truck families
   out += '<g id="dsh-legend" transform="translate(' + (W - 176) + ',14)">'
       +  '<rect x="0" y="0" width="162" height="54" rx="9" fill="#fffdfc" fill-opacity=".92" stroke="#f0e4e2"/>'
-      +  '<g transform="translate(17,16) scale(.92)">' + dshTruckSvg('#9b1c1c','in') + '</g>'
+      +  '<g transform="translate(17,16) scale(.92)">' + dshStillTruck('#9b1c1c','in') + '</g>'
       +  '<text x="33" y="19" font-size="9.5" font-weight="700" fill="#57534e">Inbound shipment</text>'
-      +  '<g transform="translate(17,39) scale(.92)">' + dshTruckSvg('#b45309','tr') + '</g>'
+      +  '<g transform="translate(17,39) scale(.92)">' + dshStillTruck('#b45309','tr') + '</g>'
       +  '<text x="33" y="42" font-size="9.5" font-weight="700" fill="#57534e">Plant transfer</text>'
       +  '</g>';
 
@@ -8861,7 +8877,7 @@ function dshWireArcs(){
 
 /* ── travelling pulses ──────────────────────────────────── */
 /* Put a truck at fraction u along its lane, nose pointing down the road. */
-function dshPlaceTruck(el, a, u){
+function dshPlaceTruck(el, a, u, scale){
   const iu = 1 - u;
   const x = iu*iu*a.x0 + 2*iu*u*a.mx + u*u*a.x1;
   const y = iu*iu*a.y0 + 2*iu*u*a.my + u*u*a.y1;
@@ -8869,9 +8885,10 @@ function dshPlaceTruck(el, a, u){
   const dyu = 2*iu*(a.my - a.y0) + 2*u*(a.y1 - a.my);
   const deg = Math.atan2(dyu, dxu) * 180 / Math.PI;
   // flip across the truck's own axis when heading west, so the wheels stay down
-  const sy = (deg > 90 || deg < -90) ? -0.95 : 0.95;
+  const k = scale || 0.95;
+  const sy = (deg > 90 || deg < -90) ? -k : k;
   el.setAttribute('transform',
-    'translate(' + x.toFixed(1) + ',' + y.toFixed(1) + ') rotate(' + deg.toFixed(1) + ') scale(0.95,' + sy + ')');
+    'translate(' + x.toFixed(1) + ',' + y.toFixed(1) + ') rotate(' + deg.toFixed(1) + ') scale(' + k + ',' + sy + ')');
 }
 
 function dshStartLoop(){
@@ -8889,7 +8906,10 @@ function dshStartLoop(){
   let inner = '';
   picks.forEach((a,i) => {
     const lateCls = (DSH.view === 'transit' && a.plan && a.plan.late && a.plan.daysLeft < 0) ? ' late' : '';
-    inner += '<g class="dsh-pulse' + lateCls + '" id="dsh-pl-' + i + '">' + dshTruckSvg(a.color, a.kind) + '</g>';
+    let glyph = dshTruckSvg(a.color, a.kind);
+    // honour the OS setting by removing the animation nodes outright
+    if(reduced) glyph = glyph.replace(/<animateTransform[^>]*\/>/g, '').replace(/<animate\b[^>]*\/>/g, '');
+    inner += '<g class="dsh-pulse' + lateCls + '" id="dsh-pl-' + i + '">' + glyph + '</g>';
   });
   host.innerHTML = inner;
   DSH.pulses = picks.map((a,i) => ({
@@ -8897,6 +8917,9 @@ function dshStartLoop(){
     t: (((a.seed * 41) % 100) / 100),
     sp: 0.0016 + (((a.seed * 67) % 100) / 100) * 0.0016
   }));
+  // Place each truck immediately. Without this they sit at the SVG origin
+  // until the first animation frame lands, which flashes in the corner.
+  DSH.pulses.forEach(p => { if(p.el) dshPlaceTruck(p.el, p.a, p.t); });
 
   // In the In-Transit view the trucks are not a decoration — each one is
   // parked at the share of the trip that has actually elapsed, so the board
@@ -8912,7 +8935,7 @@ function dshStartLoop(){
       if(!plan || plan.progress == null){
         // no pickup date on the record — park it at the origin and say so
         p.el.setAttribute('opacity', '0.28');
-        dshPlaceTruck(p.el, p.a, 0.02);
+        dshPlaceTruck(p.el, p.a, 0.02, 1.35);
         return;
       }
       let u = plan.progress;
@@ -8922,7 +8945,7 @@ function dshStartLoop(){
         u = Math.max(0.55, 0.97 - nth * 0.06);
       }
       p.el.setAttribute('opacity', '1');
-      dshPlaceTruck(p.el, p.a, u);
+      dshPlaceTruck(p.el, p.a, u, 1.35);   // the subject of this view — draw it big enough to read
     });
     return;   // no animation loop in this view
   }

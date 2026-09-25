@@ -13105,18 +13105,22 @@ html.fx-off #yk-char .yk-steam path{ opacity:.35; }
 (function(){
   'use strict';
   var GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
-  // preference order; the first one Groq accepts is remembered for the session
-  var GROQ_TEXT   = ['openai/gpt-oss-120b', 'llama-3.3-70b-versatile', 'openai/gpt-oss-20b'];
+  // preference order. Every model has its OWN 8,000 tokens-a-minute allowance
+  // on the free plan, so when one is used up the next one answers.
+  var GROQ_TEXT   = ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'openai/gpt-oss-20b'];
   var GROQ_VISION = ['qwen/qwen3.8-27b', 'meta-llama/llama-4-scout-17b-16e-instruct', 'meta-llama/llama-4-maverick-17b-128e-instruct'];
   var ANTHROPIC_MODEL = 'claude-sonnet-4-6';
-  // Groq free plan: 8,000 tokens per minute per model — one request has to fit
-  // inside that together with its answer
-  var GROQ_TPM = 8000, YAKI_MAX_OUT = 1200, SAFETY = 350;
+  // Groq counts prompt + max answer against the minute's allowance, so a Yaki
+  // request is kept near 5,000 tokens: several questions a minute still fit
+  var GROQ_TPM = 8000, YAKI_MAX_OUT = 1200, YAKI_TARGET = 5000, MAX_WAIT = 65000;
   var IMG_MAX_B64 = 3000000, IMG_MAX_SIDE = 2000;
-  var picked = { text:null, vision:null };
+  var gone = {}, cool = {}, spent = {};
+  var cpt = 2.3;   // characters per token; re-measured from Groq's own counts after every answer
 
   function provider(key){ key = String(key || ''); return key.indexOf('gsk_') === 0 ? 'groq' : key.indexOf('sk-ant-') === 0 ? 'anthropic' : 'groq'; }
-  function estTokens(s){ return Math.ceil(String(s || '').length / 3); }     // conservative for JSON-ish text
+  function estTokens(s){ return Math.ceil(String(s || '').length / cpt); }
+  // "try again in 49.23s" / "in 1m2.5s" → seconds (Groq's retry-after header is not readable from a browser)
+  function waitSecs(msg){ var m = /try again in\s+(?:(\d+)m)?\s*([\d.]+)s/i.exec(msg || ''); return m ? Math.ceil((+m[1] || 0) * 60 + (+m[2] || 0)) : 0; }
   function fail(status, message, retryAfter){ var e = new Error(message); e.status = status; if (retryAfter) e.retryAfter = retryAfter; return e; }
   function key(){ try { return (typeof loadApiKey === 'function' ? loadApiKey() : localStorage.getItem('jsl_ai_api_key')) || ''; } catch(e){ return ''; } }
 
@@ -13125,7 +13129,7 @@ html.fx-off #yk-char .yk-steam path{ opacity:.35; }
     var body = await resp.json().catch(function(){ return {}; });
     var msg = (body && body.error && (body.error.message || body.error)) || '';
     if (typeof msg !== 'string') msg = JSON.stringify(msg);
-    var ra = parseInt(resp.headers.get('retry-after') || '', 10);
+    var ra = parseInt(resp.headers.get('retry-after') || '', 10) || waitSecs(msg);
     var s = resp.status;
     if (s === 401 || s === 403) return fail(s, 'Invalid API key — check your key in the Data menu');
     // Groq answers 413 (or 429 "Request too large") when ONE request is bigger than the per-minute allowance
@@ -13148,31 +13152,51 @@ html.fx-off #yk-char .yk-steam path{ opacity:.35; }
     if (/^qwen\//.test(model)) return { reasoning_effort:'none' };
     return {};
   }
-  async function groq(kind, body, apiKey){
-    var list = picked[kind] ? [picked[kind]].concat((kind === 'vision' ? GROQ_VISION : GROQ_TEXT).filter(function(m){ return m !== picked[kind]; }))
-                            : (kind === 'vision' ? GROQ_VISION : GROQ_TEXT);
-    var last = null;
-    for (var i = 0; i < list.length; i++){
-      var model = list[i], json = !!body.response_format;
-      for (var attempt = 0; attempt < 2; attempt++){
-        var req = Object.assign({ model:model }, body, extras(model));
-        if (!json) delete req.response_format;
-        var resp;
-        try {
-          resp = await fetch(GROQ_URL, { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + apiKey }, body:JSON.stringify(req) });
-        } catch(e){ throw fail(0, 'Connection error — check your internet and try again'); }
-        if (resp.ok){
-          var data = await resp.json();
-          picked[kind] = model;
-          var c = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
-          return typeof c === 'string' ? c : '';
-        }
-        last = await httpError(resp, 'groq');
-        if (last.jsonFail && json){ json = false; continue; }     // the model could not keep strict JSON → ask again without JSON mode
-        break;
+  // tokens a model has used in the last minute (Groq refills the allowance continuously)
+  function used(model, now){ return (spent[model] || []).reduce(function(a, x){ return a + x.n * Math.max(0, 1 - (now - x.t) / 60000); }, 0); }
+  function note(model, n){ var now = Date.now(); (spent[model] = (spent[model] || []).filter(function(x){ return now - x.t < 60000; })).push({ t:now, n:n }); }
+  // ms until this model can take a request of `need` tokens
+  function waitFor(model, need, now){
+    var w = Math.max(0, (cool[model] || 0) - now);
+    for (var s = 0; s <= 60; s++){ if (GROQ_TPM - used(model, now + w + s * 1000) >= need) return w + s * 1000; }
+    return w + 60000;
+  }
+  function sleep(ms, tick){
+    return new Promise(function(res){
+      var end = Date.now() + ms;
+      (function step(){ var left = end - Date.now(); if (tick) tick(Math.ceil(left / 1000)); if (left <= 0) return res(); setTimeout(step, Math.min(1000, left)); })();
+    });
+  }
+  function chars(messages){ return messages.reduce(function(a, m){ return a + (typeof m.content === 'string' ? m.content.length : 0); }, 0); }
+  // o: { need: estimated tokens incl. the answer, onWait(seconds) }
+  async function groq(kind, body, apiKey, o){
+    o = o || {};
+    var models = kind === 'vision' ? GROQ_VISION : GROQ_TEXT, need = o.need || 0, last = null, json = !!body.response_format, waited = false;
+    for (var round = 0; round < 8; round++){
+      var now = Date.now(), model = null, wait = Infinity;
+      models.forEach(function(m){ if (gone[m]) return; var w = waitFor(m, need, now); if (w < wait){ wait = w; model = m; } });   // first free model in preference order
+      if (!model) throw last || fail(0, 'No AI model available');
+      if (wait > MAX_WAIT || (wait > 0 && waited)) throw last || fail(429, 'Rate limit — wait a minute and try again', Math.ceil(wait / 1000));   // wait at most once per question
+      if (wait > 0){ waited = true; await sleep(wait, o.onWait); }
+      var req = Object.assign({ model:model }, body, extras(model));
+      if (!json) delete req.response_format;
+      var resp;
+      try {
+        resp = await fetch(GROQ_URL, { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + apiKey }, body:JSON.stringify(req) });
+      } catch(e){ throw fail(0, 'Connection error — check your internet and try again'); }
+      if (resp.ok){
+        var data = await resp.json(), u = data && data.usage;
+        note(model, (u && u.total_tokens) || need);
+        // learn how Groq really counts this kind of text so the next prompt is sized right
+        if (kind === 'text' && u && u.prompt_tokens > 500) cpt = Math.max(1.8, Math.min(3, chars(req.messages) / u.prompt_tokens * 0.97));
+        var c = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+        return typeof c === 'string' ? c : '';
       }
-      if (!last.modelGone) throw last;                            // only a retired/unknown model moves on to the next one
-      if (picked[kind] === model) picked[kind] = null;
+      last = await httpError(resp, 'groq');
+      if (last.jsonFail && json){ json = false; continue; }       // the model could not keep strict JSON → ask again without JSON mode
+      if (last.modelGone){ gone[model] = true; continue; }        // retired / not on this key → next model
+      if (last.status === 429){ cool[model] = Date.now() + ((last.retryAfter || 20) + 1) * 1000; continue; }   // this model's minute is used up → another model, or wait
+      throw last;
     }
     throw last || fail(0, 'No AI model available');
   }
@@ -13231,14 +13255,14 @@ html.fx-off #yk-char .yk-steam path{ opacity:.35; }
         { type:'image', source:{ type:'base64', media_type:o.mime, data:o.b64 } },
         { type:'text', text:o.prompt } ] }] }, apiKey);
     }
-    var im = await shrink(o.b64, o.mime);
+    var im = await shrink(o.b64, o.mime), told = false;
     var text = await groq('vision', {
       max_completion_tokens:o.maxTokens, temperature:0.1, response_format:{ type:'json_object' },
       messages:[
         { role:'system', content:o.system },
         { role:'user', content:[ { type:'text', text:o.prompt }, { type:'image_url', image_url:{ url:'data:' + im.mime + ';base64,' + im.b64 } } ] }
       ]
-    }, apiKey);
+    }, apiKey, { onWait:function(s){ if (s > 0 && !told && typeof showToast === 'function'){ told = true; showToast('Free AI plan is busy — reading it in ' + s + ' s…'); } } });
     return jsonText(text);
   }
 
@@ -13274,23 +13298,28 @@ html.fx-off #yk-char .yk-steam path{ opacity:.35; }
   function table(title, cols, rows){ return '=== ' + title + ' ===\n' + cols.join('|') + '\n' + rows.map(function(r){ return r.map(cell).join('|'); }).join('\n'); }
   function group(list, keyOf, extra){
     var g = {};
-    list.forEach(function(x){ var k = keyOf(x) || '(none)'; var o = g[k] || (g[k] = { n:0, paid:0, save:0 }); o.n++; var sp = extra(x); o.paid += sp.paid; o.save += sp.save; });
-    return Object.keys(g).sort().map(function(k){ return [k, g[k].n, money(g[k].paid), money(g[k].save)]; });
+    var all = { n:0, paid:0, save:0 };
+    list.forEach(function(x){ var k = keyOf(x) || '(none)'; var o = g[k] || (g[k] = { n:0, paid:0, save:0 }); var sp = extra(x); [o, all].forEach(function(t){ t.n++; t.paid += sp.paid; t.save += sp.save; }); });
+    return Object.keys(g).sort().map(function(k){ return [k, g[k].n, money(g[k].paid), money(g[k].save)]; })
+      .concat([['TOTAL (all rows above)', all.n, money(all.paid), money(all.save)]]);
   }
+  // "Indiana" and "Indiana Plant" are the same plant in the data
+  function plantName(p){ p = String(p || '').trim(); return p ? p.replace(/\s+plant$/i, '') + ' Plant' : ''; }
+  function carrierName(c){ return c === 'Vendor' ? 'Vendor delivers (no carrier)' : c; }
   function shipTable(ship, lvl){
     var cols, rows;
     if (lvl <= 1){
-      cols = ['id','po','date','vendor','status','type','pickup','puDate','plant','delDate','pallets','lbs','temp','carrier','paid','vendorRate','saving','quotes'];
+      cols = ['po','date','vendor','status','type','pickup','puDate','plant','delDate','pallets','lbs','temp','carrier','paid','vendorRate','saving','quotes'];
       if (lvl === 0) cols.push('notes');
       rows = ship.map(function(s){
-        var sp = split(s), r = [s.id, s.po, s.date, s.vendor, s.status, s.type, lvl === 0 ? s.puAddr : cityState(s.puAddr), s.puDate, s.delLoc, s.delDate, s.pallets, s.weight, s.temp,
-          s.approved, sp.paid ? sp.paid : '', s.vendorRateNA ? 'N/A' : (s.vendorRate || ''), sp.save ? sp.save : '', quoteStr(s.quotes, lvl === 0)];
+        var sp = split(s), r = [s.po, s.date, s.vendor, s.status, s.type, lvl === 0 ? s.puAddr : cityState(s.puAddr), s.puDate, plantName(s.delLoc), s.delDate, s.pallets, s.weight, s.temp,
+          carrierName(s.approved), sp.paid ? sp.paid : '', s.vendorRateNA ? 'N/A' : (s.vendorRate || ''), sp.save ? sp.save : '', quoteStr(s.quotes, lvl === 0)];
         if (lvl === 0) r.push(s.notes);
         return r;
       });
     } else if (lvl === 2){
-      cols = ['id','po','date','vendor','status','type','pickup','plant','delDate','carrier','paid','vendorRate','saving'];
-      rows = ship.map(function(s){ var sp = split(s); return [s.id, s.po, s.date, s.vendor, s.status, s.type, cityState(s.puAddr), s.delLoc, s.delDate, s.approved, sp.paid || '', s.vendorRateNA ? 'N/A' : (s.vendorRate || ''), sp.save || '']; });
+      cols = ['po','date','vendor','status','type','pickup','plant','delDate','carrier','paid','vendorRate','saving'];
+      rows = ship.map(function(s){ var sp = split(s); return [s.po, s.date, s.vendor, s.status, s.type, cityState(s.puAddr), plantName(s.delLoc), s.delDate, carrierName(s.approved), sp.paid || '', s.vendorRateNA ? 'N/A' : (s.vendorRate || ''), sp.save || '']; });
     } else {
       cols = ['po','date','vendor','status','plant','carrier','paid','saving'];
       rows = ship.map(function(s){ var sp = split(s); return [s.po, s.date, s.vendor, s.status, s.delLoc, s.approved, sp.paid || '', sp.save || '']; });
@@ -13313,39 +13342,105 @@ html.fx-off #yk-char .yk-steam path{ opacity:.35; }
     var ym = function(d){ return String(d || '').slice(0, 7); };
     var out = [];
     out.push(table('EXACT TOTALS BY MONTH (inbound shipments, by request date)', ['month','shipments','freightCost','savings'], group(ship, function(s){ return ym(s.date); }, split)));
-    out.push(table('EXACT TOTALS BY VENDOR', ['vendor','shipments','freightCost','savings'], group(ship, function(s){ return s.vendor; }, split)));
-    out.push(table('EXACT TOTALS BY CARRIER (inbound)', ['carrier','shipments','paid','savings'], group(ship, function(s){ return s.approved; }, split)));
-    out.push(table('EXACT TOTALS BY PLANT (inbound delivery location)', ['plant','shipments','freightCost','savings'], group(ship, function(s){ return s.delLoc; }, split)));
+    out.push(table('EXACT TOTALS BY VENDOR (suppliers)', ['vendor','shipments','freightCost','savings'], group(ship, function(s){ return s.vendor; }, split)));
+    var sv = group(ship, function(s){ return s.vendor; }, split), svTotal = sv.pop();
+    out.push(table('SAVINGS BY VENDOR (only vendors with savings, largest first)', ['vendor','savings'],
+      sv.filter(function(r){ return r[3] !== '$0.00'; }).sort(function(a, b){ return parseFloat(b[3].slice(1)) - parseFloat(a[3].slice(1)); }).map(function(r){ return [r[0], r[3]]; }).concat([['TOTAL', svTotal[3]]])));
+    out.push(table('EXACT TOTALS BY CARRIER (inbound)', ['carrier','shipments','paid','savings'], group(ship, function(s){ return carrierName(s.approved); }, split)));
+    out.push(table('EXACT TOTALS BY PLANT (JSL delivery plants — not vendors)', ['plant','shipments','freightCost','savings'], group(ship, function(s){ return plantName(s.delLoc); }, split)));
     out.push(table('EXACT TOTALS BY STATUS (inbound)', ['status','shipments','freightCost','savings'], group(ship, function(s){ return s.status; }, split)));
     out.push(table('EXACT TRANSFER TOTALS BY MONTH', ['month','transfers','cost','-'], group(trans, function(t){ return ym(t.date); }, function(t){ return { paid:+t.approvedAmt || 0, save:0 }; })));
     return out.join('\n\n');
   }
-  function compactPrompt(system, ship, vend, trans, budget){
-    var S = JSON.stringify(ship), V = JSON.stringify(vend), T = JSON.stringify(trans);
-    var best = null;
-    for (var lvl = 0; lvl <= 3; lvl++){
-      var p = system.split(S).join(shipTable(ship, lvl)).split(V).join(vendTable(vend, lvl)).split(T).join(transTable(trans, lvl));
-      p = p.replace('=== LIVE DASHBOARD BOXES', totals(ship, trans) + '\n\nThe tables above are pipe-separated; money is in US dollars. Use the EXACT TOTALS tables for sums instead of adding rows yourself.\n\n=== LIVE DASHBOARD BOXES');
-      best = { prompt:p, level:lvl, tokens:estTokens(p) };
-      if (best.tokens <= budget) return best;
+  /* Rows picked for the question. A vendor, plant, carrier, PO, status or month
+     named in it narrows the shipment rows; otherwise the newest rows are sent.
+     Sums and counts always come from the EXACT TOTALS, which cover every record. */
+  var GENERIC = /^(foods?|ingredients?|inc|llc|ltd|corp|company|america|usa|brands?|group|storage|cold|farms?|national|frozen|plants?|vendors?|carriers?|logistics|freight|refrigerated|express|transport|trucking|services|total|totals|show|list|table|year|month|week|savings?|spend|spent|cost|costs|most|many|much|recent|this|last|the|and)$/;
+  var MONTHS = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+  var FOLLOW_UP = /^\s*(and|what about|how about|which of|of those|also|same)\b|\b(those|them|these|they)\b/i;
+  function esc(w){ return w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+  function mentions(q, name){
+    var n = String(name || '').toLowerCase().trim();
+    if (!n || n === '(none)' || GENERIC.test(n)) return false;
+    if (q.indexOf(n) >= 0) return true;
+    return n.replace(/[^a-z0-9& ]+/g, ' ').split(/\s+/).some(function(w){ return w.length >= 4 && !GENERIC.test(w) && new RegExp('\\b' + esc(w) + '\\b').test(q); });
+  }
+  function uniq(list, f){ var s = {}; list.forEach(function(x){ var v = f(x); if (v) s[v] = 1; }); return Object.keys(s); }
+  function ym(d){ return String(d || '').slice(0, 7); }
+  function filters(q, ship){
+    q = ' ' + String(q || '').toLowerCase() + ' ';
+    var f = [], st = [], now = new Date(), yr = now.getFullYear(), mo = [];
+    if (/in[\s-]?transit|on the (road|way)|en route/.test(q)) st.push('In Transit');
+    if (/\bpending\b/.test(q)) st.push('Pending');
+    if (/\bdelivered\b/.test(q)) st.push('Delivered');
+    if (st.length) f.push(function(s){ return st.indexOf(s.status) >= 0; });
+    [function(s){ return s.vendor; }, function(s){ return plantName(s.delLoc); }, function(s){ return s.approved === 'Vendor' ? '' : s.approved; }].forEach(function(get){
+      var names = uniq(ship, get).filter(function(v){ return mentions(q, v); });
+      if (names.length) f.push(function(s){ return names.indexOf(get(s)) >= 0; });
+    });
+    var nums = q.match(/\b\d{4,}\b/g);
+    if (nums) f.push(function(s){ return nums.some(function(n){ return String(s.po || '').indexOf(n) >= 0 || String(s.id) === n; }); });
+    MONTHS.forEach(function(m, i){
+      var re = m === 'may' ? /\b(in|of|during|for|since|from) may\b|\bmay \d/ : new RegExp('\\b(' + m + '|' + m.slice(0, 3) + ')\\b');
+      if (re.test(q)) mo.push(yr + '-' + ('0' + (i + 1)).slice(-2));
+    });
+    if (/\bthis month\b/.test(q)) mo.push(ym(now.toISOString()));
+    if (/\blast month\b/.test(q)){ var l = new Date(yr, now.getMonth() - 1, 15); mo.push(l.getFullYear() + '-' + ('0' + (l.getMonth() + 1)).slice(-2)); }
+    if (mo.length) f.push(function(s){ return mo.indexOf(ym(s.date)) >= 0; });   // month = request date, the same as EXACT TOTALS BY MONTH
+    return f;
+  }
+  var YAKI_RULES = [
+    'RULES:',
+    '1. English only. No greetings or filler.',
+    '2. Use only this data. For any sum, count or total use the EXACT TOTALS or DASHBOARD numbers — never add up rows yourself when a total exists; each EXACT TOTALS table ends with a TOTAL row for the grand total, and EXACT TOTAL OF THE RECORDS MATCHING THIS QUESTION (when present) is the sum for the records the question asks about. Months are by request date.Vendors, plants and carriers are separate tables: a "by vendor" answer uses ONLY the BY VENDOR table (a plant or carrier is not a vendor). In savings breakdowns list only rows with savings above $0.00.',
+    '3. First line = the answer, with the key number in <b>bold</b>.',
+    '4. More than one record → an HTML table right after the first line: <table><thead><tr><th>PO</th><th>Vendor</th><th>Amount</th></tr></thead><tbody><tr><td>93558</td><td>A&B Ingredients</td><td>$1,428.00</td></tr></tbody></table>. Max 5 columns, one-word headers, the number column last, sorted sensibly (newest or largest first). Money as $X,XXX.XX.',
+    '5. Never use markdown (no ** and no | tables).',
+    '6. The SHIPMENTS rows may be only part of the records — their title says how many are shown. If the records needed are not shown, say so and suggest naming a vendor, PO, status, plant or month.',
+    '7. At most one short closing line. Never mention APIs, keys or databases.',
+    '8. If something is not in the data, say so in one line.'
+  ].join('\n');
+  function groqPrompt(o, ask, prev, budget){
+    var ship = o.ship || [], trans = o.trans || [], vend = o.vend || [], q = String(ask || '');
+    if (prev && FOLLOW_UP.test(q)) q = prev + ' ' + q;           // "which of those…" keeps the previous question's filters
+    var f = filters(q, ship);
+    var lq = q.toLowerCase();
+    var matched = ship.filter(function(s){ return f.every(function(fn){ return fn(s); }); })
+      .sort(function(a, b){ return String(b.date || '').localeCompare(String(a.date || '')); });
+    var sys = String(o.system || ''), a = sys.indexOf('=== LIVE DASHBOARD BOXES'), b = sys.indexOf('FIELDS —');
+    var parts = ['You are Yaki, the JSL Foods Freight Hub AI assistant for the purchasing/logistics team. Below is the live Freight Hub data, fetched right now. Tables are pipe-separated; money is in US dollars.',
+      a >= 0 ? sys.slice(a, b > a ? b : undefined).trim() : '', totals(ship, trans)];
+    if (/contact|e-?mail|phone|call|reach|rating|terms|address/.test(lq)){
+      var vs = vend.filter(function(v){ return mentions(' ' + lq + ' ', v.name); });
+      parts.push(vendTable(vs.length ? vs : vend, vs.length ? 1 : 2));
     }
-    // still too big (a very large year): keep the newest shipment rows that fit;
-    // every older record is still counted in the EXACT TOTALS tables
-    var sorted = ship.slice().sort(function(a, b){ return String(b.date || '').localeCompare(String(a.date || '')); });
-    var lo = 1, hi = sorted.length - 1, fit = null;
-    while (lo <= hi){
-      var mid = (lo + hi) >> 1, part = sorted.slice(0, mid);
-      var tbl = shipTable(part, 3).replace('(' + part.length + ', all records)', '(newest ' + part.length + ' of ' + ship.length + ' — older ones are included in the EXACT TOTALS tables)');
-      var q = best.prompt.split(shipTable(ship, 3)).join(tbl);
-      if (estTokens(q) <= budget){ fit = { prompt:q, level:4, tokens:estTokens(q) }; lo = mid + 1; } else hi = mid - 1;
+    if (/transfer|\btrf\b|inter-?plant|between plants/.test(lq)){
+      var ts = trans.slice().sort(function(x, y){ return String(y.date || '').localeCompare(String(x.date || '')); }).slice(0, 25);
+      parts.push(transTable(ts, 2).replace(/^=== TRANSFERS \([^)]*\) ===/, '=== TRANSFERS (newest ' + ts.length + ' of ' + trans.length + ') ==='));
     }
-    return fit || best;
+    var fixed = parts.join('\n\n') + '\n\n' + YAKI_RULES;
+    var lvl = /pallet|weight|lbs|pounds|temp|frozen|refrig|pick ?up|quote|dims/.test(lq) ? 1 : 2;
+    var room = budget - estTokens(fixed) - 80;
+    var rows = function(k){
+      return shipTable(matched.slice(0, k), lvl).replace(/^=== SHIPMENTS \([^)]*\) ===/, '=== SHIPMENTS — ' + (f.length ? 'records matching this question' : 'newest records')
+        + ': showing ' + k + ' of ' + matched.length + ' (' + ship.length + ' in the system; the EXACT TOTALS cover all of them) ===');
+    };
+    var lo = 0, hi = matched.length;
+    while (lo < hi){ var mid = (lo + hi + 1) >> 1; if (estTokens(rows(mid)) <= room) lo = mid; else hi = mid - 1; }
+    parts.push(rows(lo));
+    if (f.length){
+      var sum = matched.reduce(function(t, s){ var sp = split(s); t.paid += sp.paid; t.save += sp.save; return t; }, { paid:0, save:0 });
+      parts.push('=== EXACT TOTAL OF THE RECORDS MATCHING THIS QUESTION ===\nshipments|freightCost|savings\n' + matched.length + '|' + money(sum.paid) + '|' + money(sum.save));
+    }
+    var prompt = parts.join('\n\n') + '\n\n' + YAKI_RULES;
+    return { prompt:prompt, level:lvl, rows:lo, matched:matched.length, filtered:f.length > 0, tokens:estTokens(prompt) };
   }
   function trimHistory(h, budget){
+    var clean = h.filter(function(m, i){ return !(m.role === 'user' && i < h.length - 1 && h[i + 1].role === 'user'); });   // drop questions that never got an answer
     var out = [], used = 0;
-    for (var i = h.length - 1; i >= 0 && out.length < 8; i--){
-      var m = h[i], c = String(m.content || '');
-      if (m.role === 'assistant' && c.length > 900) c = c.slice(0, 900) + ' …';
+    for (var i = clean.length - 1; i >= 0 && out.length < 6; i--){
+      var m = clean[i], c = String(m.content || '');
+      if (m.role === 'assistant'){ c = c.replace(/<\/?(div|span)[^>]*>/g, '').replace(/\s+/g, ' '); if (c.length > 700) c = c.slice(0, 700) + ' …'; }
       var t = estTokens(c) + 8;
       if (out.length && used + t > budget) break;
       out.unshift({ role:m.role, content:c }); used += t;
@@ -13375,18 +13470,30 @@ html.fx-off #yk-char .yk-steam path{ opacity:.35; }
     var apiKey = key();
     if (!apiKey) throw fail(401, 'No API key');
     if (provider(apiKey) === 'anthropic') return anthropic({ max_tokens:1500, system:o.system, messages:o.history }, apiKey);
-    var hist = trimHistory(o.history, 1200);
-    var budget = GROQ_TPM - YAKI_MAX_OUT - SAFETY - hist.tokens;
-    var c = compactPrompt(o.system, o.ship || [], o.vend || [], o.trans || [], budget);
-    yaki.last = { level:c.level, promptTokens:c.tokens, historyTokens:hist.tokens, budget:budget };
-    var text = await groq('text', {
-      max_completion_tokens:YAKI_MAX_OUT, temperature:0.2,
-      messages:[{ role:'system', content:c.prompt + '\n\nFormatting reminder: use <b></b> and HTML <table> only — never markdown.' }].concat(hist.messages)
-    }, apiKey);
+    var users = (o.history || []).filter(function(m){ return m.role === 'user'; });
+    var ask = users.length ? users[users.length - 1].content : '', prev = users.length > 1 ? users[users.length - 2].content : '';
+    var hist = trimHistory(o.history || [], 700);
+    var budget = YAKI_TARGET - YAKI_MAX_OUT - hist.tokens, text = '';
+    var bubble = function(s){
+      var el = document.querySelector('#yk-typing .yk-bub');
+      if (el) el.textContent = s > 0 ? 'Free AI plan is catching its breath — answering in ' + s + ' s…' : 'Yaki is searching your data…';
+    };
+    for (var n = 0; n < 3; n++){
+      var c = groqPrompt(o, ask, prev, budget), sys = c.prompt + '\n\nFormatting reminder: use <b></b> and HTML <table> only — never markdown.';
+      yaki.last = { level:c.level, rows:c.rows, matched:c.matched, filtered:c.filtered, promptTokens:c.tokens, historyTokens:hist.tokens, budget:budget, cpt:cpt };
+      try {
+        text = await groq('text', { max_completion_tokens:YAKI_MAX_OUT, temperature:0.2, messages:[{ role:'system', content:sys }].concat(hist.messages) },
+          apiKey, { need:estTokens(sys) + hist.tokens + YAKI_MAX_OUT, onWait:bubble });
+        break;
+      } catch(e){
+        if (e.status === 413 && n < 2){ budget = Math.floor(budget * 0.7); continue; }   // Groq counted more than estimated → smaller prompt
+        throw e;
+      }
+    }
     return /\|\s*-{2,}/.test(text) || /^#{1,6}\s/m.test(text) ? mdToHtml(text) : text;
   }
 
-  window.jslAI = { provider:function(){ return provider(key()); }, vision:vision, yaki:yaki, _compact:compactPrompt, _trim:trimHistory, _md:mdToHtml, models:{ text:GROQ_TEXT, vision:GROQ_VISION } };
+  window.jslAI = { provider:function(){ return provider(key()); }, vision:vision, yaki:yaki, _compact:groqPrompt, _trim:trimHistory, _reset:function(){ gone = {}; cool = {}; spent = {}; }, _md:mdToHtml, models:{ text:GROQ_TEXT, vision:GROQ_VISION } };
 })();
 
 </script>

@@ -11649,49 +11649,219 @@ CRITICAL OUTPUT RULES — answers must be clean, scannable and ACTION-READY:
     sync();
   });
 
-  /* ── 8e. WORLD view — a 3D globe facing the USA ─────────────────────
-     A third board view next to All shipments / In transit. The globe
-     library and map data (globe.gl + three.js, world-atlas, us-atlas) load
-     from jsDelivr only the first time World is clicked, so the page itself
-     stays as light as before. Shows the same scope as All shipments (month,
-     carrier and state filters apply); every lane, origin and plant comes
-     from the board's own DSH.arcs. Offline / no WebGL → a toast and the
-     board stays on All shipments. ── */
+  /* ── 8e. WORLD view — HD satellite map, straight down, trucks on real roads ──
+     A third board view next to All shipments / In transit. MapLibre GL and
+     the map data load from jsDelivr only the first time World is clicked,
+     so the page itself stays as light as before. Imagery: NASA GIBS Blue
+     Marble relief (whole planet, to zoom 8) under USGS aerial imagery (the
+     US, to zoom 16), both public domain; every tile is fetched at twice the
+     screen resolution. Lanes follow the real highway route from the
+     pickup to the plant (OSRM, OpenStreetMap roads): one request per new
+     origin→plant pair, throttled, cached in localStorage; until a route
+     arrives (or if routing is unreachable) the lane is a faint curve.
+     Shows the same scope as All shipments (month, carrier and state filters
+     apply); every lane, origin and plant comes from the board's own
+     DSH.arcs. Offline / no WebGL → a toast and the board stays on All
+     shipments. Read-only: it never touches shipments, transfers or saves. ── */
   safe('world', function(){
     var btn = document.getElementById('fx-view-world');
     var mapwrap = document.querySelector('#panel-dashboard .dsh-mapwrap');
     var board = document.querySelector('#panel-dashboard .dsh-board');
     if (!btn || !mapwrap || typeof window.dshSetView !== 'function') return;
+    btn.title = 'HD satellite map of the freight network — trucks on the real roads';
     var CDN = {
-      globe: 'https://cdn.jsdelivr.net/npm/globe.gl@2.46.2/dist/globe.gl.min.js',
-      topo:  'https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js',
-      us:    'https://cdn.jsdelivr.net/npm/us-atlas@3.0.1/states-10m.json',
-      img:   'https://cdn.jsdelivr.net/npm/three-globe@2.31.0/example/img/'    // NASA Blue Marble imagery, relief, water, stars
+      js:   'https://cdn.jsdelivr.net/npm/maplibre-gl@5.9.0/dist/maplibre-gl.js',
+      css:  'https://cdn.jsdelivr.net/npm/maplibre-gl@5.9.0/dist/maplibre-gl.css',
+      topo: 'https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js',
+      us:   'https://cdn.jsdelivr.net/npm/us-atlas@3.0.1/states-10m.json'
     };
-    var HOME = { lat:37.8, lng:-96.4, altitude:1.42 };
-    var host = null, loading = null, geo = null, idleT = null, driftT = null, lastLng = null, missing = 0;
+    var TILES = {
+      relief: 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief_Bathymetry/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg',
+      usgs:   'jslusgs://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}'
+    };
+    var OSRM = 'https://router.project-osrm.org/route/v1/driving/';
+    var ROUTE_KEY = 'jsl_fx_routes_v1';
+    var HOME = [[-124.8, 24.4], [-66.9, 49.4]];          // the lower 48
+    var GLOBE = { center:[-97, 30], zoom:1.55 };           // the planet, USA facing
+    var TRUCK_CAP = 26;                                  // same as the board
+    var host = null, loading = null, geo = null, map = null, ready = false, missing = 0;
+    var markers = [], trucks = [], lanes = [], raf = 0, live = true, tipEl = null, chip = null;
 
     function toast(msg, kind){ try { if (typeof showToast === 'function') showToast(msg, kind || 'info'); } catch(e){} }
     function webgl(){ try { var c = document.createElement('canvas'); return !!(window.WebGLRenderingContext && (c.getContext('webgl2') || c.getContext('webgl'))); } catch(e){ return false; } }
     function script(src){ return new Promise(function(res, rej){ var s = document.createElement('script'); s.src = src; s.async = true; s.crossOrigin = 'anonymous'; s.onload = function(){ res(); }; s.onerror = function(){ rej(new Error('could not load ' + src)); }; document.head.appendChild(s); }); }
+    function css(href){
+      if (document.querySelector('link[data-fx-world]')) return null;
+      return new Promise(function(res){ var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = href; l.crossOrigin = 'anonymous'; l.setAttribute('data-fx-world', '1'); l.onload = l.onerror = function(){ res(); }; document.head.appendChild(l); });
+    }
     function json(u){ return fetch(u, { credentials:'omit' }).then(function(r){ if (!r.ok) throw new Error(u + ' → ' + r.status); return r.json(); }); }
     function timeout(p, ms){ return new Promise(function(res, rej){ var t = setTimeout(function(){ rej(new Error('timed out')); }, ms); p.then(function(v){ clearTimeout(t); res(v); }, function(e){ clearTimeout(t); rej(e); }); }); }
     function load(){
       if (loading) return loading;
       loading = timeout(Promise.all([
-        typeof window.Globe === 'function' ? null : script(CDN.globe),
+        window.maplibregl ? null : script(CDN.js),
+        css(CDN.css),
         window.topojson ? null : script(CDN.topo),
         json(CDN.us)
       ]), 25000).then(function(r){
-        if (typeof window.Globe !== 'function' || !window.topojson || !window.topojson.feature) throw new Error('globe library missing');
-        // only the states are drawn: the satellite imagery already shows every other
-        // country, and each extra polygon costs frames (measured: country caps halved the fps)
-        var states = window.topojson.feature(r[2], r[2].objects.states).features
-          .map(function(f){ f.__kind = 'state'; return f; });
-        geo = { polys: states };
+        if (!window.maplibregl || !window.topojson || !window.topojson.feature) throw new Error('map library missing');
+        geo = { polys: window.topojson.feature(r[3], r[3].objects.states).features };
+        protocol();
       });
       loading.catch(function(){ loading = null; });                                    // allow a retry later
       return loading;
+    }
+
+    /* USGS answers outside the US with a plain white filler tile; those
+       become transparent so the NASA relief underneath shows instead */
+    var CLEAR_PNG = null;
+    function protocol(){
+      if (protocol.done) return; protocol.done = true;
+      CLEAR_PNG = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='), function(c){ return c.charCodeAt(0); }).buffer;
+      window.maplibregl.addProtocol('jslusgs', function(params, ctl){
+        return fetch(params.url.replace('jslusgs://', 'https://'), { credentials:'omit', signal: ctl && ctl.signal }).then(function(r){
+          if (!r.ok) return { data: CLEAR_PNG.slice(0) };
+          return r.arrayBuffer().then(function(buf){
+            if (buf.byteLength > 6000 || typeof createImageBitmap !== 'function') return { data: buf };
+            return createImageBitmap(new Blob([buf])).then(function(bm){
+              var c = document.createElement('canvas'); c.width = 8; c.height = 8;
+              var x = c.getContext('2d'); x.drawImage(bm, 0, 0, 8, 8);
+              var px = x.getImageData(0, 0, 8, 8).data, blank = true;
+              for (var i = 0; i < px.length; i += 4) if (px[i] < 246 || px[i + 1] < 246 || px[i + 2] < 246 || px[i + 3] < 200) { blank = false; break; }
+              return { data: blank ? CLEAR_PNG.slice(0) : buf };
+            }, function(){ return { data: buf }; });
+          });
+        });
+      });
+    }
+
+    /* ── geometry helpers ── */
+    function mx(lng){ return (lng + 180) / 360; }
+    function my(lat){ var r = Math.max(-85, Math.min(85, lat)) * Math.PI / 180; return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2; }
+    function decode(str, prec){
+      var f = Math.pow(10, prec), i = 0, lat = 0, lng = 0, out = [];
+      while (i < str.length){
+        var b, s = 0, r = 0;
+        do { b = str.charCodeAt(i++) - 63; r |= (b & 31) << s; s += 5; } while (b >= 32);
+        lat += (r & 1) ? ~(r >> 1) : (r >> 1); s = 0; r = 0;
+        do { b = str.charCodeAt(i++) - 63; r |= (b & 31) << s; s += 5; } while (b >= 32);
+        lng += (r & 1) ? ~(r >> 1) : (r >> 1);
+        out.push([lng / f, lat / f]);
+      }
+      return out;
+    }
+    function encode(pts){
+      var out = '', pLat = 0, pLng = 0;
+      function enc(v){ v = v < 0 ? ~(v << 1) : v << 1; var s = ''; while (v >= 32){ s += String.fromCharCode((32 | (v & 31)) + 63); v >>= 5; } return s + String.fromCharCode(v + 63); }
+      pts.forEach(function(p){ var la = Math.round(p[1] * 1e5), ln = Math.round(p[0] * 1e5); out += enc(la - pLat) + enc(ln - pLng); pLat = la; pLng = ln; });
+      return out;
+    }
+    function simplify(pts, tol){                                   // Douglas–Peucker, iterative
+      if (pts.length < 3) return pts;
+      var keep = new Uint8Array(pts.length), st = [[0, pts.length - 1]], t2 = tol * tol;
+      keep[0] = keep[pts.length - 1] = 1;
+      while (st.length){
+        var s = st.pop(), a = s[0], b = s[1], ax = pts[a][0], ay = pts[a][1], dx = pts[b][0] - ax, dy = pts[b][1] - ay, L = dx * dx + dy * dy, md = 0, mi = -1;
+        for (var i = a + 1; i < b; i++){
+          var px = pts[i][0] - ax, py = pts[i][1] - ay, u = L ? Math.max(0, Math.min(1, (px * dx + py * dy) / L)) : 0;
+          var ex = px - u * dx, ey = py - u * dy, d = ex * ex + ey * ey;
+          if (d > md){ md = d; mi = i; }
+        }
+        if (md > t2 && mi > 0){ keep[mi] = 1; st.push([a, mi], [mi, b]); }
+      }
+      return pts.filter(function(p, i){ return keep[i]; });
+    }
+    function curve(o, d){                                         // placeholder lane until the road arrives
+      var dx = d[0] - o[0], dy = d[1] - o[1], k = 0.16, cx = (o[0] + d[0]) / 2 - dy * k, cy = (o[1] + d[1]) / 2 + dx * k, out = [];
+      for (var i = 0; i <= 40; i++){ var t = i / 40, u = 1 - t; out.push([u * u * o[0] + 2 * u * t * cx + t * t * d[0], u * u * o[1] + 2 * u * t * cy + t * t * d[1]]); }
+      return out;
+    }
+    function pathOf(coords){                                      // cumulative length in web-mercator units, for even truck speed
+      var xs = [], ys = [], cum = [0];
+      coords.forEach(function(p, i){ xs.push(mx(p[0])); ys.push(my(p[1])); if (i) cum.push(cum[i - 1] + Math.hypot(xs[i] - xs[i - 1], ys[i] - ys[i - 1])); });
+      return { c:coords, x:xs, y:ys, cum:cum, len:cum[cum.length - 1] || 1e-9 };
+    }
+    function at(P, s){                                            // point at mercator distance s along the path
+      s = Math.max(0, Math.min(P.len, s));
+      var lo = 0, hi = P.cum.length - 1;
+      while (hi - lo > 1){ var m = (lo + hi) >> 1; if (P.cum[m] <= s) lo = m; else hi = m; }
+      var seg = P.cum[hi] - P.cum[lo], f = seg ? (s - P.cum[lo]) / seg : 0;
+      return { x: P.x[lo] + (P.x[hi] - P.x[lo]) * f, y: P.y[lo] + (P.y[hi] - P.y[lo]) * f,
+               lng: P.c[lo][0] + (P.c[hi][0] - P.c[lo][0]) * f, lat: P.c[lo][1] + (P.c[hi][1] - P.c[lo][1]) * f };
+    }
+
+    /* ── real roads: OSRM, one pair at a time, cached ── */
+    var ROUTES = {}, queue = [], busy = false, stats = { want:0, got:0 };
+    function rkey(o, d){ return o[0].toFixed(3) + ',' + o[1].toFixed(3) + '>' + d[0].toFixed(3) + ',' + d[1].toFixed(3); }
+    function readCache(){
+      if (readCache.m) return readCache.m;
+      var m = {}; try { m = JSON.parse(localStorage.getItem(ROUTE_KEY) || '{}') || {}; } catch(e){ m = {}; }
+      return (readCache.m = m);
+    }
+    function writeCache(k, enc){
+      var m = readCache(); m[k] = { p:enc, t:Date.now() };
+      var ks = Object.keys(m);
+      if (ks.length > 160) ks.sort(function(a, b){ return m[a].t - m[b].t; }).slice(0, ks.length - 160).forEach(function(x){ delete m[x]; });
+      for (var n = 0; n < 4; n++){
+        try { localStorage.setItem(ROUTE_KEY, JSON.stringify(m)); return; }
+        catch(e){ ks = Object.keys(m).sort(function(a, b){ return m[a].t - m[b].t; }); ks.slice(0, Math.ceil(ks.length / 3)).forEach(function(x){ if (x !== k) delete m[x]; }); }
+      }
+    }
+    function road(o, d){
+      var k = rkey(o, d);
+      if (ROUTES[k]) return ROUTES[k] === 'fail' || ROUTES[k] === 'wait' ? null : ROUTES[k];
+      var c = readCache()[k];
+      if (c && c.p){ try { ROUTES[k] = decode(c.p, 5); return ROUTES[k]; } catch(e){} }
+      ROUTES[k] = 'wait'; queue.push({ k:k, o:o, d:d });
+      pump();
+      return null;
+    }
+    function pump(){
+      if (busy) return;
+      var job = queue.shift();
+      if (!job){ status(); return; }
+      busy = true; status();
+      var url = OSRM + job.o[0].toFixed(5) + ',' + job.o[1].toFixed(5) + ';' + job.d[0].toFixed(5) + ',' + job.d[1].toFixed(5) + '?overview=full&geometries=polyline6&alternatives=false&steps=false';
+      var tries = 0;
+      (function go(){
+        timeout(fetch(url, { credentials:'omit' }).then(function(r){ if (r.status === 429) throw { retry:true }; if (!r.ok) throw new Error('route ' + r.status); return r.json(); }), 20000)
+          .then(function(j){
+            var rt = j && j.code === 'Ok' && j.routes && j.routes[0];
+            if (!rt || !rt.geometry) throw new Error('no route');
+            var pts = simplify(decode(rt.geometry, 6), 0.00025);
+            // the road must actually reach both ends (islands, water, bad geocodes → keep the curve)
+            var e0 = pts[0], e1 = pts[pts.length - 1];
+            if (Math.hypot(e0[0] - job.o[0], e0[1] - job.o[1]) > 1.5 || Math.hypot(e1[0] - job.d[0], e1[1] - job.d[1]) > 1.5) throw new Error('route misses the ends');
+            ROUTES[job.k] = pts; writeCache(job.k, encode(pts));
+            stats.got++; routed();
+          })
+          .catch(function(e){
+            if (e && e.retry && tries++ < 2){ setTimeout(go, 4000); return; }
+            ROUTES[job.k] = 'fail';
+          })
+          .then(function(){ if (ROUTES[job.k] !== 'wait'){ busy = false; setTimeout(pump, 1100); } });
+      })();
+    }
+    var routedT = null;
+    function routed(){                                            // swap the arrived roads in, batched
+      if (routedT) return;
+      routedT = setTimeout(function(){
+        routedT = null; if (!map || !ready) return;
+        lanes.forEach(function(L){
+          if (L.real) return;
+          var r = road(L.o, L.d); if (!r) return;
+          L.coords = r; L.real = true; L.P = pathOf(r);
+        });
+        paintLanes(); status();
+      }, 400);
+    }
+    function status(){
+      if (!chip) return;
+      var wait = lanes.filter(function(L){ return !L.real && ROUTES[L.k] === 'wait'; }).length;
+      var uniq = {}; lanes.forEach(function(L){ if (!L.real && ROUTES[L.k] === 'wait') uniq[L.k] = 1; });
+      var n = Object.keys(uniq).length;
+      chip.style.display = wait ? '' : 'none';
+      if (wait) chip.innerHTML = '<span class="fx-globe-spin"></span>Tracing real roads · ' + n + ' route' + (n === 1 ? '' : 's') + ' to go';
     }
 
     /* ── data: everything comes from the board's own lanes ── */
@@ -11740,9 +11910,8 @@ CRITICAL OUTPUT RULES — answers must be clean, scannable and ACTION-READY:
         }
         if (Math.abs(o.ll[0] - d.ll[0]) < 0.02 && Math.abs(o.ll[1] - d.ll[1]) < 0.02) return;   // same metro: nothing to draw
         var amt = a.kind === 'tr' ? (a.t.approvedAmt || 0) : (a.r.cost || 0);
-        arcs.push({ a:a, sLat:o.ll[1], sLng:o.ll[0], eLat:d.ll[1], eLng:d.ll[0], tr:a.kind === 'tr',
-                    colors:[hexA(a.color, .3), hexA(a.color, .95)], stroke:0.42 + Math.min(amt / 2600, 2.2) * 0.3,
-                    ig:(((a.seed || i + 1) * 37) % 100) / 100, tip:tipFor(a) });
+        arcs.push({ a:a, i:i, o:[o.ll[0], o.ll[1]], d:[d.ll[0], d.ll[1]], tr:a.kind === 'tr', color:a.color || '#9b1c1c',
+                    w:1 + Math.min(amt / 2600, 2.2) * 0.35, seed:a.seed || i + 1, tip:tipFor(a) });
       });
       (DSH.locs || []).forEach(function(l){ var g = l.geo || dshPlantPt(l.name); if (g && g.ll) plant(l.name, g.ll); });
       Object.keys(plants).forEach(function(k){ var l = byLoc[k]; if (l){ plants[k].loads = l.rows.length; plants[k].cost = l.cost || 0; } });
@@ -11758,10 +11927,8 @@ CRITICAL OUTPUT RULES — answers must be clean, scannable and ACTION-READY:
       return { arcs:arcs, origins:Object.keys(origins).map(function(k){ return origins[k]; }), clusters:clusters, stateLoad:stateLoad };
     }
 
-    /* ── the globe ── */
+    /* ── plant cards (same card as before, now a map marker) ── */
     function card(c){
-      // the library positions this element on the plant (and owns its transform),
-      // so it is a zero-size anchor; the visible card sits just to its right
       var el = document.createElement('div'), box = document.createElement('div');
       el.className = 'fx-gl-anchor';
       box.className = 'fx-gl-card' + (c.members.length > 1 ? ' multi' : '') + (c.west ? ' west' : '');
@@ -11769,7 +11936,7 @@ CRITICAL OUTPUT RULES — answers must be clean, scannable and ACTION-READY:
       var pin = document.createElement('button');
       pin.type = 'button'; pin.className = 'fx-gl-pin' + (sel ? ' on' : '');
       pin.title = c.members.map(function(p){ return p.name; }).join(' · ');
-      pin.innerHTML = whIcon(sel ? 'on' : 'plant') + (c.members.length > 1 ? '<b>' + c.members.length + '</b>' : '');
+      pin.innerHTML = whIcon(sel ? 'on' : 'plant') + (c.members.length > 1 ? '<b>' + c.members.length + '</b>' : '') + '<i class="pulse"></i>';
       pin.addEventListener('click', function(ev){ ev.stopPropagation(); dshSetPlant(c.members[0].name); });
       el.appendChild(pin);
       el.appendChild(box);
@@ -11784,62 +11951,33 @@ CRITICAL OUTPUT RULES — answers must be clean, scannable and ACTION-READY:
         row.addEventListener('click', function(ev){ ev.stopPropagation(); dshSetPlant(p.name); });
         box.appendChild(row);
       });
+      ['mouseenter', 'mousemove'].forEach(function(t){ el.addEventListener(t, function(){ hideTip(); }); });
       return el;
     }
-    function motion(){ return fxOn() && !reduced() && DSH.playing !== false; }
-    function apply(){
-      var g = WORLD.globe; if (!g) return;
-      var m = motion(), sp = DSH.speed || 1;
-      g.arcDashAnimateTime(function(d){ return m ? (d.tr ? 5200 : 3400) / sp : 0; });
-      g.ringsData(m ? (g.__rings || []) : []);
-      var c = g.controls(); if (c) c.autoRotate = m && !idleT;
-    }
-    WORLD.apply = apply;
-    WORLD.refresh = function(){ refresh(); };
-    function refresh(){
-      var g = WORLD.globe; if (!g || !WORLD.on) return;
-      var D = collect();
-      g.arcsData(D.arcs);
-      g.pointsData(D.origins);
-      g.__rings = D.clusters.map(function(c){ return { lat:c.lat, lng:c.lng, sel:c.members.some(function(p){ return p.name === DSH.plant; }) }; });
-      g.htmlElementsData(D.clusters.concat(wxBadges()));
-      g.__stateLoad = D.stateLoad;
-      g.polygonCapColor(function(f){ return capColor(f); })    // new accessors → tints / heights are re-evaluated
-       .polygonSideColor(function(f){ return sideColor(f); })
-       .polygonAltitude(function(f){ return altOf(f); });
-      apply();
-      var sub = document.getElementById('dsh-board-sub');
-      if (sub && sub.textContent.indexOf('World — ') !== 0) sub.textContent = 'World — ' + sub.textContent;
-      var off = document.getElementById('dsh-offmap');
-      if (off && missing) off.textContent = (off.textContent ? off.textContent + ' · ' : 'Not shown: ') + missing + ' lane' + (missing === 1 ? '' : 's') + ' without coordinates (not on the globe)';
-    }
-    /* states sit on the satellite imagery as tinted glass: weather alerts in
-       their own colours, pickups / the selected origin in the brand red */
+
+    /* states sit on the imagery as tinted glass: weather alerts in their
+       own colours, pickups / the selected origin in the brand red */
     function abOf(f){ return DSH_ABBR[String(f.properties && f.properties.name || '').toLowerCase()]; }
-    function wxOf(f){ var ab = f.__kind === 'state' && abOf(f); return ab && WX.on && WX.states ? WX.states[String(ab).toUpperCase()] || null : null; }
+    function wxOf(f){ var ab = abOf(f); return ab && WX.on && WX.states ? WX.states[String(ab).toUpperCase()] || null : null; }
+    var stateLoad = {};
     function capColor(f){
-      if (f.__kind !== 'state') return 'rgba(0,0,0,0)';
-      var g = WORLD.globe, ab = abOf(f), w = wxOf(f);
-      if (ab && DSH.originState === ab) return 'rgba(220,38,38,.58)';
-      if (w) return 'rgba(' + WX_CATS[w.top.cat].rgb + ',' + [0, .18, .38, .54][w.top.lvl] + ')';
-      return ab && g && g.__stateLoad && g.__stateLoad[ab] ? 'rgba(239,68,68,.30)' : 'rgba(255,255,255,.04)';
+      var ab = abOf(f), w = wxOf(f);
+      if (ab && DSH.originState === ab) return 'rgba(220,38,38,.26)';
+      if (w) return 'rgba(' + WX_CATS[w.top.cat].rgb + ',' + [0, .08, .14, .2][w.top.lvl] + ')';        // light glass: the coloured outline carries the alert
+      return 'rgba(255,255,255,0)';                           // pickups read from the origin dots: a tint would stain the photo
     }
-    function sideColor(f){
-      if (f.__kind !== 'state') return 'rgba(0,0,0,0)';
-      var w = wxOf(f);
-      return w ? 'rgba(' + WX_CATS[w.top.cat].rgb + ',.7)' : 'rgba(255,255,255,.10)';
-    }
-    function altOf(f){
-      if (f.__kind !== 'state') return 0.003;
-      var w = wxOf(f); return w ? 0.008 + w.top.lvl * 0.005 : 0.007;
+    function stateTip(f){
+      var nm = f.properties && f.properties.name, ab = abOf(f), n = ab ? stateLoad[ab] : 0;
+      var wx = wxOf(f) && WX.tipHtml ? WX.tipHtml(String(ab).toUpperCase()) : '';
+      if (wx) return '<div class="fx-wx-gtip">' + wx + (n ? '<div class="pk">' + n + ' pickup' + (n === 1 ? '' : 's') + ' in scope</div>' : '') + '</div>';
+      return n ? '<b>' + dshEsc(nm) + '</b> — ' + n + ' pickup' + (n === 1 ? '' : 's') : '';
     }
     function wxBadges(){
       if (!WX.on || !WX.states || !geo) return [];
       var out = [];
       geo.polys.forEach(function(f){
-        if (f.__kind !== 'state') return;
         var ab = String(abOf(f) || '').toUpperCase(), w = ab && WX.states[ab], pt = WX_PTS[f.properties && f.properties.name];
-        if (w && pt && w.top.lvl > 1) out.push({ lat:pt[2], lng:pt[3], __wx:ab, w:w });
+        if (w && pt && w.top.lvl > 1) out.push({ lat:pt[2], lng:pt[3], w:w });
       });
       return out;
     }
@@ -11851,118 +11989,268 @@ CRITICAL OUTPUT RULES — answers must be clean, scannable and ACTION-READY:
       el.title = (d.w.list || []).map(function(e){ return e.ev; }).join(' · ');
       return el;
     }
+
+    /* ── trucks: the board's own rig, self-contained (own gradient ids) ── */
+    function truckHtml(L, dir){
+      var g = _dshTkGlyph(L.tr ? 'tr' : 'in', dir, 0, false, L.color).replace(/fxTk/g, 'fxTkW');
+      return '<svg viewBox="-11.6 -11 30 16.6" aria-hidden="true">' + g + '</svg>';
+    }
+    function placeTruck(T){
+      var P = T.L.P, s = T.t * P.len, p = at(P, s);
+      var z = map.getZoom(), ahead = 14 / (512 * Math.pow(2, z));
+      var q = at(P, Math.min(P.len, s + ahead)), b = at(P, Math.max(0, s - ahead));
+      var pq = map.project([q.lng, q.lat]), pb = map.project([b.lng, b.lat]);          // screen space: right on the globe and the flat map
+      var deg = Math.atan2(pq.y - pb.y, pq.x - pb.x) * 180 / Math.PI;
+      var k = Math.max(0.34, Math.min(1, (z - 1) / 2.6));                                // smaller rigs when the whole planet is in view
+      var w = deg > 90 || deg < -90;
+      if (T.w !== w){ T.w = w; T.inner.innerHTML = truckHtml(T.L, w ? 'w' : 'e'); }
+      T.m.setLngLat([p.lng, p.lat]);
+      T.inner.style.transform = 'rotate(' + deg.toFixed(1) + 'deg) scale(' + k.toFixed(2) + ',' + (w ? -k : k).toFixed(2) + ')';
+      T.el.style.opacity = (T.t < .04 || T.t > .96) ? '.25' : '1';
+    }
+    function motion(){ return fxOn() && !reduced() && DSH.playing !== false; }
+    function loop(){
+      raf = 0;
+      if (!map || !WORLD.on || !live || !motion()) return;
+      var sp = DSH.speed || 1;
+      trucks.forEach(function(T){ T.t += T.sp * sp; if (T.t > 1) T.t = 0; placeTruck(T); });
+      raf = requestAnimationFrame(loop);
+    }
+    function apply(){
+      if (!map) return;
+      host.classList.toggle('fx-still', !motion());
+      if (raf){ cancelAnimationFrame(raf); raf = 0; }
+      if (WORLD.on && live && motion()) raf = requestAnimationFrame(loop);
+      else if (ready) trucks.forEach(placeTruck);
+    }
+    WORLD.apply = apply;
+    // the dashboard's idle logic pauses the World view through this handle
+    WORLD.globe = { pauseAnimation:function(){ live = false; apply(); }, resumeAnimation:function(){ live = true; apply(); } };
+    WORLD.refresh = function(){ refresh(); };
+
+    /* ── map layers ── */
+    function fc(list){ return { type:'FeatureCollection', features:list }; }
+    function paintLanes(){
+      if (!map || !ready) return;
+      map.getSource('fx-lanes').setData(fc(lanes.map(function(L, i){
+        return { type:'Feature', id:i, properties:{ i:i, c:L.color, tr:L.tr ? 1 : 0, real:L.real ? 1 : 0, w:L.w }, geometry:{ type:'LineString', coordinates:L.coords } };
+      })));
+      trucks.forEach(function(T){ placeTruck(T); });
+    }
+    function paintStates(){
+      if (!map || !ready) return;
+      map.getSource('fx-states').setData(fc(geo.polys.map(function(f, i){
+        var ab = abOf(f);
+        var w = wxOf(f);
+        return { type:'Feature', id:i, properties:{ name:f.properties && f.properties.name, fill:capColor(f), sel:ab && DSH.originState === ab ? 1 : 0,
+          wx:w ? 'rgba(' + WX_CATS[w.top.cat].rgb + ',.95)' : '', lvl:w ? w.top.lvl : 0 }, geometry:f.geometry };
+      })));
+    }
+    function refresh(){
+      if (!map || !ready || !WORLD.on) return;
+      var D = collect();
+      stateLoad = D.stateLoad;
+      lanes = D.arcs.map(function(A){
+        var k = rkey(A.o, A.d), r = road(A.o, A.d), coords = r || curve(A.o, A.d);
+        return { a:A.a, k:k, o:A.o, d:A.d, tr:A.tr, color:A.color, w:A.w, seed:A.seed, tip:A.tip, real:!!r, coords:coords, P:pathOf(coords) };
+      });
+      paintStates();
+      map.getSource('fx-origins').setData(fc(D.origins.map(function(o, i){
+        return { type:'Feature', id:i, properties:{ c:o.color, r:4 + Math.sqrt(o.n) * 1.7, tip:'<b>' + dshEsc(o.label) + '</b><br>' + o.n + ' load' + (o.n === 1 ? '' : 's') + ' · ' + dshMoney(o.cost) }, geometry:{ type:'Point', coordinates:[o.lng, o.lat] } };
+      })));
+      markers.forEach(function(m){ m.remove(); }); markers = [];
+      trucks.forEach(function(T){ T.m.remove(); }); trucks = [];
+      // trucks first so the plant cards stay on top of them
+      var picks = lanes;
+      if (picks.length > TRUCK_CAP){ var step = picks.length / TRUCK_CAP; picks = Array.from({ length:TRUCK_CAP }, function(_, k){ return lanes[Math.floor(k * step)]; }); }
+      picks.forEach(function(L){
+        var el = document.createElement('div'), inner = document.createElement('div');
+        el.className = 'fx-wtk'; inner.className = 'fx-wtk-in'; el.appendChild(inner);
+        el.addEventListener('mouseenter', function(ev){ showTip(L.tip, ev); });
+        el.addEventListener('mousemove', function(ev){ showTip(L.tip, ev); });
+        el.addEventListener('mouseleave', hideTip);
+        el.addEventListener('click', function(ev){ ev.stopPropagation(); dshSetPlant(L.tr ? L.a.toLoc : L.a.l.name); });
+        var T = { L:L, el:el, inner:inner, w:null, t:((L.seed * 41) % 100) / 100, sp:0.0016 + ((L.seed * 67) % 100) / 100 * 0.0016 };
+        T.m = new window.maplibregl.Marker({ element:el, anchor:'center' }).setLngLat(L.o).addTo(map);
+        trucks.push(T);
+      });
+      D.clusters.forEach(function(c){ var m = new window.maplibregl.Marker({ element:card(c), anchor:'center' }).setLngLat([c.lng, c.lat]).addTo(map); m.__c = c; markers.push(m); });
+      sideCards();
+      wxBadges().forEach(function(d){ markers.push(new window.maplibregl.Marker({ element:wxEl(d), anchor:'center' }).setLngLat([d.lng, d.lat]).addTo(map)); });
+      paintLanes();
+      apply(); status();
+      var sub = document.getElementById('dsh-board-sub');
+      if (sub && sub.textContent.indexOf('World — ') !== 0) sub.textContent = 'World — ' + sub.textContent;
+      var off = document.getElementById('dsh-offmap');
+      if (off && missing) off.textContent = (off.textContent ? off.textContent + ' · ' : 'Not shown: ') + missing + ' lane' + (missing === 1 ? '' : 's') + ' without coordinates (not on the map)';
+    }
+    // a plant card opens toward the middle of the map, so it never runs off the edge
+    function sideCards(){
+      if (!map || !host) return;
+      var W = host.clientWidth;
+      markers.forEach(function(m){
+        if (!m.__c) return;
+        var x = map.project([m.__c.lng, m.__c.lat]).x, box = m.getElement().querySelector('.fx-gl-card');
+        if (box) box.classList.toggle('west', x > W * 0.5 ? x > W - 250 || m.__c.west : false);
+      });
+    }
     WORLD.theme = function(){
-      var g = WORLD.globe; if (!g) return;
+      if (!map || !ready) return;
       var dark = !!(board && board.classList.contains('fx-board-dark'));
-      // the starfield is a CSS background behind the transparent canvas (dash-v31.css):
-      // a WebGL sky sphere would be redrawn every frame
-      try { g.atmosphereColor(dark ? '#5aa9ff' : '#8cc4ff').atmosphereAltitude(dark ? 0.22 : 0.19); } catch(e){}
+      try {
+        ['fx-relief', 'fx-usgs'].forEach(function(id){
+          map.setPaintProperty(id, 'raster-brightness-max', dark ? 0.78 : 1);
+          map.setPaintProperty(id, 'raster-saturation', dark ? -0.1 : 0.08);
+          map.setPaintProperty(id, 'raster-contrast', dark ? 0.08 : 0.06);
+        });
+      } catch(e){}
     };
+
+    /* ── hover card (same look as the board's tooltips) ── */
+    function showTip(html, ev){
+      if (!tipEl || !html){ hideTip(); return; }
+      var b = host.getBoundingClientRect(), x = ev.clientX - b.left + 14, y = ev.clientY - b.top + 14;
+      tipEl.innerHTML = html; tipEl.style.display = 'block';
+      if (x + tipEl.offsetWidth + 8 > b.width) x = ev.clientX - b.left - tipEl.offsetWidth - 14;
+      if (y + tipEl.offsetHeight + 8 > b.height) y = ev.clientY - b.top - tipEl.offsetHeight - 14;
+      tipEl.style.left = x + 'px'; tipEl.style.top = y + 'px';
+    }
+    function hideTip(){ if (tipEl) tipEl.style.display = 'none'; }
+    function pick(pt){
+      var f = map.queryRenderedFeatures([[pt.x - 5, pt.y - 5], [pt.x + 5, pt.y + 5]], { layers:['fx-lane-hit', 'fx-origins'] });
+      if (f.length) return f.sort(function(a, b){ return (a.layer.id === 'fx-origins' ? 0 : 1) - (b.layer.id === 'fx-origins' ? 0 : 1); })[0];
+      f = map.queryRenderedFeatures(pt, { layers:['fx-state-fill'] });
+      return f[0] || null;
+    }
+
     function build(){
       var el = host.querySelector('.fx-globe-gl');
-      var cfg = { rendererConfig:{ antialias:true, alpha:true, powerPreference:'high-performance' }, animateIn:false };
-      var g;
-      try { g = new window.Globe(el, cfg); } catch(e){ g = window.Globe(cfg)(el); }
-      WORLD.globe = g;
-      window.__fxWorldGlobe = g;                       // read-only handle for diagnostics / tests
-      g.width(host.clientWidth || 900).height(host.clientHeight || 560)
-        .backgroundColor('rgba(0,0,0,0)')
-        .globeImageUrl(CDN.img + 'earth-blue-marble.jpg')
-        .bumpImageUrl(CDN.img + 'earth-topology.png')
-        .showAtmosphere(true).atmosphereColor('#8cc4ff').atmosphereAltitude(0.19)
-        .showGraticules(false)
-        .polygonsData(geo.polys)
-        .polygonAltitude(function(f){ return altOf(f); })
-        .polygonCapColor(function(f){ return capColor(f); })
-        .polygonSideColor(function(f){ return sideColor(f); })
-        .polygonStrokeColor(function(f){ return f.__kind === 'state' ? 'rgba(255,255,255,.62)' : 'rgba(255,255,255,.28)'; })
-        .polygonLabel(function(f){
-          if (f.__kind !== 'state') return '';
-          var nm = f.properties && f.properties.name, ab = abOf(f), n = ab && g.__stateLoad ? g.__stateLoad[ab] : 0;
-          var wx = wxOf(f) && WX.tipHtml ? WX.tipHtml(String(ab).toUpperCase()) : '';
-          if (wx) return '<div class="fx-wx-gtip">' + wx + (n ? '<div class="pk">' + n + ' pickup' + (n === 1 ? '' : 's') + ' in scope</div>' : '') + '</div>';
-          return n ? '<b>' + dshEsc(nm) + '</b> — ' + n + ' pickup' + (n === 1 ? '' : 's') : '';
-        })
-        .onPolygonClick(function(f){
-          if (f.__kind !== 'state') return;
-          var ab = DSH_ABBR[String(f.properties && f.properties.name || '').toLowerCase()];
-          if (ab && g.__stateLoad && g.__stateLoad[ab] && typeof dshSetOriginState === 'function') dshSetOriginState(ab);
-        })
-        .polygonsTransitionDuration(0)
-        .arcStartLat('sLat').arcStartLng('sLng').arcEndLat('eLat').arcEndLng('eLng')
-        .arcColor('colors').arcStroke('stroke').arcAltitudeAutoScale(0.34)
-        .arcDashLength(function(d){ return d.tr ? 0.05 : 0.42; })
-        .arcDashGap(function(d){ return d.tr ? 0.035 : 0.2; })
-        .arcDashInitialGap('ig')
-        .arcsTransitionDuration(0)
-        .arcLabel('tip')
-        .onArcClick(function(d){ dshSetPlant(d.tr ? d.a.toLoc : d.a.l.name); })
-        .pointLat('lat').pointLng('lng').pointAltitude(0.016).pointsMerge(false)
-        .pointRadius(function(o){ return 0.34 + Math.sqrt(o.n) * 0.1; })
-        .pointColor(function(o){ return o.color; })
-        .pointLabel(function(o){ return '<b>' + dshEsc(o.label) + '</b><br>' + o.n + ' load' + (o.n === 1 ? '' : 's') + ' · ' + dshMoney(o.cost); })
-        .ringLat('lat').ringLng('lng').ringAltitude(0.014)
-        .ringColor(function(r){ return function(t){ return 'rgba(220,38,38,' + ((1 - t) * (r.sel ? 0.95 : 0.7)).toFixed(3) + ')'; }; })
-        .ringMaxRadius(function(r){ return r.sel ? 4.2 : 3; }).ringPropagationSpeed(1.5).ringRepeatPeriod(1500)
-        .htmlLat('lat').htmlLng('lng').htmlAltitude(function(d){ return d.__wx ? 0.03 : 0.02; })
-        .htmlElement(function(d){ return d.__wx ? wxEl(d) : card(d); });
-      if (typeof g.htmlElementVisibilityModifier === 'function') g.htmlElementVisibilityModifier(function(el, vis){ el.style.opacity = vis ? '' : '0'; el.style.pointerEvents = vis ? '' : 'none'; });
-      try {
-        var mat = g.globeMaterial();
-        if (mat && mat.color) mat.color.set('#ffffff');
-        if (mat && mat.emissive) { mat.emissive.set('#000000'); mat.emissiveIntensity = 0; }
-        if (mat && 'bumpScale' in mat) mat.bumpScale = 4;
-        if (mat && 'shininess' in mat) mat.shininess = 16;
-        // oceans catch the light: a specular map from the water mask, attached once the
-        // imagery texture exists (its constructor is three.js's Texture)
-        var water = new Image(); water.crossOrigin = 'anonymous';
-        water.onload = function(){
-          var tries = 0, t = setInterval(function(){
-            if (++tries > 80){ clearInterval(t); return; }
-            if (!mat.map || !mat.map.constructor) return;
-            clearInterval(t);
-            try {
-              var tx = new mat.map.constructor(water); tx.needsUpdate = true;
-              mat.specularMap = tx;
-              if (mat.specular && mat.specular.set) mat.specular.set('#3f5566');
-              mat.needsUpdate = true;
-            } catch(e){}
-          }, 250);
-        };
-        water.src = CDN.img + 'earth-water.png';
-      } catch(e){}
-      WORLD.theme();
-      var c = g.controls();
-      if (c){
-        c.autoRotateSpeed = 0.32; c.enableDamping = true; c.minDistance = 125; c.maxDistance = 560;
-        c.addEventListener('start', function(){ c.autoRotate = false; clearTimeout(idleT); idleT = 1; });
-        c.addEventListener('end', function(){
-          clearTimeout(idleT);
-          idleT = setTimeout(function(){ idleT = null; if (!WORLD.on) return; var p = g.pointOfView(); if (Math.abs(((p.lng - HOME.lng + 540) % 360) - 180) > 35 || p.altitude > 2.6) g.pointOfView(HOME, 1400); apply(); }, 6000);
-        });
-      }
-      // a slow drift that turns back before the USA leaves the middle of the view
-      driftT = setInterval(function(){
-        if (!WORLD.on || !c || !c.autoRotate) { lastLng = null; return; }
-        var p = g.pointOfView(), dl = ((p.lng - HOME.lng + 540) % 360) - 180;
-        if (lastLng != null){ var mv = ((p.lng - lastLng + 540) % 360) - 180; if ((dl > 20 && mv > 0) || (dl < -20 && mv < 0)) c.autoRotateSpeed = -c.autoRotateSpeed; }
-        lastLng = p.lng;
-      }, 400);
-      if (window.ResizeObserver) new ResizeObserver(function(){ if (host && host.clientWidth) g.width(host.clientWidth).height(host.clientHeight); }).observe(host);
+      var ML = window.maplibregl;
+      var dpr = window.devicePixelRatio || 1;
+      map = new ML.Map({
+        container: el,
+        pixelRatio: Math.min(3, Math.max(2, dpr)),        // always at least 2× — supersampled on ordinary screens
+        canvasContextAttributes: { antialias:true, powerPreference:'high-performance' },
+        attributionControl: false,
+        center: GLOBE.center, zoom: GLOBE.zoom,
+        minZoom: 1.25, maxZoom: 16, maxPitch: 0, dragRotate: false, pitchWithRotate: false, touchPitch: false,
+        renderWorldCopies: false, fadeDuration: 180,
+        style: {
+          version: 8,
+          projection: { type:'globe' },                  // the whole planet when zoomed out; flattens into the map as you zoom in
+          sky: { 'atmosphere-blend':['interpolate', ['linear'], ['zoom'], 0, 1, 4, 0.85, 6.5, 0] },
+          sources: {
+            relief: { type:'raster', tiles:[TILES.relief], tileSize:128, maxzoom:8, attribution:'' },
+            usgs:   { type:'raster', tiles:[TILES.usgs], tileSize:128, minzoom:6, maxzoom:16, bounds:[-179.9, 17.5, -64.5, 71.6] },
+            'fx-states':  { type:'geojson', data:fc([]) },
+            'fx-lanes':   { type:'geojson', data:fc([]), lineMetrics:true },
+            'fx-origins': { type:'geojson', data:fc([]) }
+          },
+          layers: [
+            { id:'fx-bg', type:'background', paint:{ 'background-color':'#0b2238' } },
+            { id:'fx-relief', type:'raster', source:'relief', paint:{ 'raster-resampling':'linear', 'raster-saturation':0.08, 'raster-contrast':0.06 } },
+            { id:'fx-usgs', type:'raster', source:'usgs', minzoom:6,
+              paint:{ 'raster-opacity':['interpolate', ['linear'], ['zoom'], 6, 0, 7.2, 1], 'raster-saturation':0.08, 'raster-contrast':0.06 } },
+            { id:'fx-state-fill', type:'fill', source:'fx-states', paint:{ 'fill-color':['get', 'fill'], 'fill-antialias':false } },
+            { id:'fx-state-line', type:'line', source:'fx-states', layout:{ 'line-join':'round' },
+              paint:{ 'line-color':['case', ['==', ['get', 'sel'], 1], '#fecaca', ['!=', ['get', 'wx'], ''], ['get', 'wx'], 'rgba(255,255,255,0.62)'],
+                      'line-width':['interpolate', ['linear'], ['zoom'], 3, ['case', ['==', ['get', 'sel'], 1], 2, ['>', ['get', 'lvl'], 0], ['+', 0.8, ['*', 0.5, ['get', 'lvl']]], 0.7], 8, ['case', ['==', ['get', 'sel'], 1], 3.2, ['>', ['get', 'lvl'], 0], 2.8, 1.4]] } },
+            // placeholder curves while the road is being traced
+            { id:'fx-lane-wait', type:'line', source:'fx-lanes', filter:['==', ['get', 'real'], 0], layout:{ 'line-cap':'round' },
+              paint:{ 'line-color':'rgba(255,255,255,0.7)', 'line-width':1.3, 'line-dasharray':[1, 2.4] } },
+            // real roads: soft glow, white casing, carrier-coloured core, a bright centre line
+            { id:'fx-lane-glow', type:'line', source:'fx-lanes', filter:['==', ['get', 'real'], 1], layout:{ 'line-join':'round', 'line-cap':'round' },
+              paint:{ 'line-color':['get', 'c'], 'line-opacity':0.35, 'line-blur':['interpolate', ['linear'], ['zoom'], 3, 3, 10, 5],
+                      'line-width':['interpolate', ['linear'], ['zoom'], 3, ['*', 6, ['get', 'w']], 10, ['*', 11, ['get', 'w']]] } },
+            { id:'fx-lane-case', type:'line', source:'fx-lanes', filter:['==', ['get', 'real'], 1], layout:{ 'line-join':'round', 'line-cap':'round' },
+              paint:{ 'line-color':'#ffffff', 'line-opacity':0.95,
+                      'line-width':['interpolate', ['linear'], ['zoom'], 3, ['+', 2.6, ['*', 1.6, ['get', 'w']]], 10, ['+', 6, ['*', 4, ['get', 'w']]]] } },
+            { id:'fx-lane-core', type:'line', source:'fx-lanes', filter:['all', ['==', ['get', 'real'], 1], ['==', ['get', 'tr'], 0]], layout:{ 'line-join':'round', 'line-cap':'round' },
+              paint:{ 'line-color':['get', 'c'],
+                      'line-width':['interpolate', ['linear'], ['zoom'], 3, ['*', 1.6, ['get', 'w']], 10, ['*', 4, ['get', 'w']]] } },
+            { id:'fx-lane-core-tr', type:'line', source:'fx-lanes', filter:['all', ['==', ['get', 'real'], 1], ['==', ['get', 'tr'], 1]], layout:{ 'line-join':'round' },
+              paint:{ 'line-color':['get', 'c'], 'line-dasharray':[1.6, 1.1],
+                      'line-width':['interpolate', ['linear'], ['zoom'], 3, ['*', 1.6, ['get', 'w']], 10, ['*', 4, ['get', 'w']]] } },
+            { id:'fx-lane-mid', type:'line', source:'fx-lanes', filter:['all', ['==', ['get', 'real'], 1], ['==', ['get', 'tr'], 0]], minzoom:6.5, layout:{ 'line-join':'round' },
+              paint:{ 'line-color':'rgba(255,255,255,0.8)', 'line-width':['interpolate', ['linear'], ['zoom'], 6.5, 0.4, 12, 1.1], 'line-dasharray':[3, 3] } },
+            { id:'fx-lane-hit', type:'line', source:'fx-lanes', layout:{ 'line-join':'round' }, paint:{ 'line-color':'#000', 'line-opacity':0.001, 'line-width':14 } },
+            { id:'fx-origins', type:'circle', source:'fx-origins',
+              paint:{ 'circle-color':['get', 'c'], 'circle-radius':['get', 'r'], 'circle-stroke-color':'#ffffff', 'circle-stroke-width':2, 'circle-pitch-alignment':'map' } }
+          ]
+        }
+      });
+      // top-left: the weather legend owns the bottom-right corner
+      map.addControl(new ML.NavigationControl({ showCompass:false }), 'top-left');
+      map.addControl(new ML.AttributionControl({ compact:true, customAttribution:'Imagery NASA GIBS · USGS · Roads © OpenStreetMap contributors (OSRM)' }), 'top-left');
+      map.touchZoomRotate.disableRotation();
+      if (map.keyboard && map.keyboard.disableRotation) map.keyboard.disableRotation();
+      window.__fxWorldMap = map;                        // read-only handle for diagnostics / tests
+      map.on('mousemove', function(e){
+        var f = pick(e.point), html = '';
+        if (f){
+          if (f.layer.id === 'fx-lane-hit'){ var L = lanes[f.properties.i]; html = L ? L.tip : ''; }
+          else if (f.layer.id === 'fx-origins') html = f.properties.tip;
+          else { var g = geo.polys.filter(function(p){ return p.properties && p.properties.name === f.properties.name; })[0]; html = g ? stateTip(g) : ''; }
+        }
+        map.getCanvas().style.cursor = f && (f.layer.id === 'fx-lane-hit' || (f.layer.id === 'fx-state-fill' && html && stateLoad[DSH_ABBR[String(f.properties.name || '').toLowerCase()]])) ? 'pointer' : '';
+        if (html) showTip(html, e.originalEvent); else hideTip();
+      });
+      map.getCanvas().addEventListener('mouseleave', hideTip);
+      map.on('movestart', hideTip);
+      map.on('click', function(e){
+        var f = pick(e.point); if (!f) return;
+        if (f.layer.id === 'fx-lane-hit'){ var L = lanes[f.properties.i]; if (L) dshSetPlant(L.tr ? L.a.toLoc : L.a.l.name); return; }
+        if (f.layer.id === 'fx-state-fill'){
+          var ab = DSH_ABBR[String(f.properties.name || '').toLowerCase()];
+          if (ab && stateLoad[ab] && typeof dshSetOriginState === 'function') dshSetOriginState(ab);
+        }
+      });
+      map.on('zoom', function(){
+        if (!raf && ready) trucks.forEach(placeTruck);
+        host.classList.toggle('fx-far', map.getZoom() < 2.7);   // planet view: pins only, the cards return as you zoom in
+      });
+      map.on('moveend', sideCards);
+      if (window.ResizeObserver) new ResizeObserver(function(){ if (map && host && host.clientWidth) map.resize(); }).observe(host);
+      return new Promise(function(res){
+        // the style is inline, so data layers can be filled as soon as it is parsed — no need to wait for every tile
+        function go(){
+          if (ready) return; ready = true; WORLD.theme();
+          var at = host.querySelector('.maplibregl-ctrl-attrib');                  // credits folded into the (i) button
+          if (at) at.classList.remove('maplibregl-compact-show');
+          res();
+        }
+        if (map.isStyleLoaded()) go(); else { map.once('style.load', go); map.once('load', go); }
+      });
     }
     function ensureHost(){
       if (host) return;
       host = document.createElement('div');
-      host.className = 'fx-globe'; host.id = 'fx-globe';
+      host.className = 'fx-globe fx-hdmap'; host.id = 'fx-globe';
       host.innerHTML = '<div class="fx-globe-gl"></div>'
         + '<div class="fx-globe-legend">'
-        +   '<span><svg viewBox="0 0 18 8" aria-hidden="true"><path d="M1 4h16" stroke="#1e40af" stroke-width="2.4" stroke-linecap="round" opacity=".9"/></svg>Inbound lane</span>'
-        +   '<span><svg viewBox="0 0 18 8" aria-hidden="true"><path d="M1 4h16" stroke="#c2410c" stroke-width="2.4" stroke-dasharray="2.2 2.6" stroke-linecap="round"/></svg>Plant transfer</span>'
-        +   '<span><svg viewBox="0 0 18 8" aria-hidden="true"><circle cx="9" cy="4" r="3" fill="#15803d"/></svg>Pickup origin</span>'
+        +   '<span><svg viewBox="0 0 18 8" aria-hidden="true"><path d="M1 4h16" stroke="#fff" stroke-width="5" stroke-linecap="round"/><path d="M1 4h16" stroke="#1e40af" stroke-width="2.4" stroke-linecap="round"/></svg>Inbound — real road route</span>'
+        +   '<span><svg viewBox="0 0 18 8" aria-hidden="true"><path d="M1 4h16" stroke="#fff" stroke-width="5" stroke-linecap="round"/><path d="M1 4h16" stroke="#c2410c" stroke-width="2.4" stroke-dasharray="3 2"/></svg>Plant transfer</span>'
+        +   '<span><svg viewBox="0 0 18 8" aria-hidden="true"><circle cx="9" cy="4" r="3.2" fill="#15803d" stroke="#fff" stroke-width="1.4"/></svg>Pickup origin</span>'
         +   '<span class="gl-plant">' + whIcon('plant') + 'JSL plant</span>'
         + '</div>'
-        + '<div class="fx-globe-status" role="status"><span class="fx-globe-spin"></span>Loading the 3D globe…</div>';
+        + '<div class="fx-hd-chip" role="status" style="display:none"></div>'
+        + '<div class="float-tooltip-kap fx-hd-tip" style="display:none"></div>'
+        + '<svg class="fx-hd-defs" width="0" height="0" aria-hidden="true"><defs>'
+        +   dshTruckDefs().replace(/<symbol[\s\S]*<\/symbol>/, '').replace(/fxTk/g, 'fxTkW') + '</defs></svg>'
+        + '<div class="fx-globe-status" role="status"><span class="fx-globe-spin"></span>Loading the HD satellite map…</div>';
       mapwrap.appendChild(host);
+      tipEl = host.querySelector('.fx-hd-tip');
+      chip = host.querySelector('.fx-hd-chip');
+    }
+    /* from the globe down to the USA: a slow descent the first time, a short glide after */
+    function home(fresh){
+      if (!map) return;
+      var pad = { top:40, bottom:40, left:40, right:40 };
+      if (!motion()){ map.fitBounds(HOME, { padding:pad, duration:0 }); return; }
+      if (fresh){
+        map.jumpTo(GLOBE);
+        setTimeout(function(){ if (WORLD.on && map) map.fitBounds(HOME, { padding:pad, duration:4200, curve:1.2, essential:true }); }, 1100);
+      } else map.fitBounds(HOME, { padding:pad, duration:900 });
     }
     function markSeg(){
       btn.classList.toggle('on', WORLD.on);
@@ -11976,12 +12264,14 @@ CRITICAL OUTPUT RULES — answers must be clean, scannable and ACTION-READY:
     function exit(){
       if (!WORLD.on) return;
       WORLD.on = false;
+      hideTip();
       markSeg();
+      apply();
       if (WORLD.sync) WORLD.sync();
     }
     function enter(){
       if (WORLD.on) return;
-      if (!webgl()){ toast('This browser cannot draw the 3D globe (WebGL is turned off) — staying on the map.', 'error'); return; }
+      if (!webgl()){ toast('This browser cannot draw the satellite map (WebGL is turned off) — staying on the map.', 'error'); return; }
       WORLD.on = true;
       if (DSH.view !== 'all') origSetView('all');        // World shows the All-shipments scope
       ensureHost();
@@ -11990,20 +12280,21 @@ CRITICAL OUTPUT RULES — answers must be clean, scannable and ACTION-READY:
       if (WORLD.sync) WORLD.sync();
       load().then(function(){
         if (!WORLD.on) return;
-        var fresh = !WORLD.globe;
-        if (fresh) build();
-        refresh();
-        if (WORLD.sync) WORLD.sync();
-        host.classList.remove('loading');
-        var g = WORLD.globe;
-        if (fresh && motion()){ g.pointOfView({ lat:24, lng:-52, altitude:3.1 }, 0); setTimeout(function(){ g.pointOfView(HOME, 1900); }, 30); }
-        else g.pointOfView(HOME, fresh ? 0 : 900);
+        var fresh = !map;
+        return (fresh ? build() : Promise.resolve()).then(function(){
+          if (!WORLD.on) return;
+          map.resize();
+          refresh();
+          if (WORLD.sync) WORLD.sync();
+          host.classList.remove('loading');
+          home(fresh);
+        });
       }).catch(function(err){
         if (window.console) console.warn('[FX] World view unavailable:', err);
         var waiting = WORLD.on;
         exit();
         if (host) host.classList.remove('loading');
-        if (waiting) toast('The World view needs an internet connection to load the 3D globe — showing All shipments.', 'error');
+        if (waiting) toast('The World view needs an internet connection to load the satellite map — showing All shipments.', 'error');
       });
     }
 
@@ -13497,6 +13788,50 @@ html.fx-off #yk-char .yk-steam path{ opacity:.35; }
 })();
 
 </script>
+<style id="jsl-world-hd">
+/* ── World view: HD satellite map seen straight down (MapLibre) ── */
+/* deep space around the planet (seen when zoomed out to the globe) */
+.fx-globe.fx-hdmap, .fx-board-dark .fx-globe.fx-hdmap, html.fx-dash-space .fx-board-dark .fx-globe.fx-hdmap{
+  background:radial-gradient(55% 65% at 50% 50%, rgba(40,90,170,.22) 0%, rgba(10,20,45,.1) 50%, transparent 75%),
+    url('https://cdn.jsdelivr.net/npm/three-globe@2.31.0/example/img/night-sky.png') center / 900px auto repeat, #02040a !important; }
+.fx-hdmap .fx-globe-gl{ position:absolute; inset:0; }
+.fx-hdmap .maplibregl-canvas{ outline:none; }
+.fx-hdmap .fx-hd-defs{ position:absolute; width:0; height:0; overflow:hidden; }
+.fx-hdmap .fx-hd-tip{ position:absolute; z-index:5; pointer-events:none; }
+.fx-hdmap .fx-globe-legend{ z-index:3; box-shadow:0 10px 24px -14px rgba(2,6,23,.55); }
+.fx-hdmap .fx-globe-legend svg{ width:20px; }
+.fx-hd-chip{ position:absolute; left:14px; top:14px; z-index:3; display:flex; align-items:center; gap:9px; padding:7px 12px; border-radius:999px; pointer-events:none;
+  background:rgba(255,253,252,.93); border:1px solid #f0e4e2; box-shadow:0 8px 20px -12px rgba(2,6,23,.5);
+  font-size:9.5px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; color:#7c5a55; }
+.fx-hd-chip .fx-globe-spin{ width:11px; height:11px; }
+.fx-board-dark .fx-hd-chip{ background:rgba(10,15,28,.9); border-color:#263041; color:#94a3b8; }
+/* trucks: the board's rig, driving the real road */
+.fx-wtk{ width:0; height:0; cursor:pointer; z-index:1; transition:opacity .3s; }
+.fx-wtk-in{ position:absolute; left:-24px; top:-15px; width:48px; height:26.5px; transform-origin:24px 15px; }
+.fx-wtk-in svg{ display:block; width:48px; height:26.5px; overflow:visible; filter:drop-shadow(0 2px 2.5px rgba(0,0,0,.45));
+  animation:fx-wtk-bob .46s ease-in-out infinite alternate; }
+.fx-hdmap.fx-still .fx-wtk-in svg{ animation:none; }
+@keyframes fx-wtk-bob{ to{ transform:translate3d(0,-.7px,0); } }
+.fx-hdmap .maplibregl-marker.fx-gl-anchor{ z-index:4; }
+.fx-hdmap .maplibregl-marker.fx-gl-wx{ z-index:3; }
+.fx-hdmap .fx-gl-card{ transition:opacity .3s; }
+.fx-hdmap.fx-far .fx-gl-card, .fx-hdmap.fx-far .maplibregl-marker.fx-gl-wx{ opacity:0 !important; pointer-events:none; }
+/* plant pins: a soft pulse under the selected plant */
+.fx-gl-pin .pulse{ position:absolute; left:50%; top:88%; width:10px; height:10px; margin:-5px 0 0 -5px; border-radius:50%;
+  border:2px solid rgba(254,202,202,.95); opacity:0; pointer-events:none; }
+.fx-hdmap:not(.fx-still) .fx-gl-pin.on .pulse{ animation:fx-pin-pulse 1.8s ease-out infinite; }
+.fx-hdmap .fx-gl-pin{ filter:drop-shadow(0 3px 4px rgba(0,0,0,.45)); }
+.fx-hdmap .fx-gl-card{ box-shadow:0 12px 28px -12px rgba(2,6,23,.6); }
+/* map controls in the board's style (top-left, below the road-tracing chip) */
+.fx-hdmap .maplibregl-ctrl-top-left{ top:46px; }
+.fx-hdmap .maplibregl-marker.fx-gl-wx{ margin:0; }
+.fx-hdmap .maplibregl-ctrl-group{ border-radius:10px; overflow:hidden; box-shadow:0 8px 20px -12px rgba(2,6,23,.55) !important; }
+.fx-hdmap .maplibregl-ctrl-attrib{ font:600 9px/1.4 'Inter',system-ui,sans-serif; }
+.fx-board-dark .fx-hdmap .maplibregl-ctrl-group{ background:#0f172a; }
+.fx-board-dark .fx-hdmap .maplibregl-ctrl-group button{ filter:invert(1) hue-rotate(180deg); }
+.fx-board-dark .fx-hdmap .maplibregl-ctrl-attrib{ background:rgba(10,15,28,.75); color:#94a3b8; }
+.fx-board-dark .fx-hdmap .maplibregl-ctrl-attrib a{ color:#cbd5e1; }
+</style>
 </body>
 </html>
 

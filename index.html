@@ -2860,6 +2860,13 @@ html.fx-exporting .workspace, html.fx-exporting .panel, html.fx-exporting .panel
     </button>
   </div>
 
+  <!-- COMPARE INNER TABS — Rates | Payments -->
+  <div class="inner-tabs cmp-inner-tabs">
+    <div class="inner-tab active" id="ctab-rates" onclick="jslPay.switchPane('rates',this)">Compare Rates</div>
+    <div class="inner-tab" id="ctab-payments" onclick="jslPay.switchPane('payments',this)">Payments<span class="pay-tab-count" id="pay-tab-count"></span></div>
+  </div>
+
+  <div id="cmp-rates-pane">
   <!-- FILTERS -->
   <div class="card" style="margin-bottom:12px;">
     <div class="card-hd" style="padding:10px 18px;">
@@ -2962,6 +2969,99 @@ html.fx-exporting .workspace, html.fx-exporting .panel, html.fx-exporting .panel
     <div class="savings-box" id="savings-explanation" style="display:none;">
       <div class="savings-box-title">💰 How Your Savings Are Calculated</div>
       <div id="savings-breakdown"></div>
+    </div>
+  </div>
+  </div><!-- /cmp-rates-pane -->
+
+  <!-- PAYMENTS PANE -->
+  <div id="cmp-pay-pane" style="display:none;">
+    <div class="card pay-drop-card">
+      <div class="card-hd">
+        <span class="card-title">Upload Carrier Invoice</span>
+        <span class="pay-hint">PDF or screenshot · drag &amp; drop, browse, or paste with Ctrl+V</span>
+      </div>
+      <div class="card-body">
+        <label class="pay-drop" id="pay-drop">
+          <input type="file" id="pay-file" accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/*" multiple style="display:none;">
+          <svg class="pay-drop-ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg>
+          <span class="pay-drop-title">Drop a carrier invoice here</span>
+          <span class="pay-drop-sub">The PO or TRF number and the carrier are read automatically, the shipment is found and marked as paid. Any difference against the approved amount is flagged.</span>
+          <span class="btn btn-primary btn-sm pay-drop-btn">Browse files</span>
+        </label>
+        <div id="pay-results"></div>
+      </div>
+    </div>
+
+    <div class="metrics-grid" id="pay-metrics" style="grid-template-columns:repeat(4,1fr);"></div>
+
+    <div class="card">
+      <div class="card-hd">
+        <span class="card-title">Payment Control</span>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-ghost btn-sm" onclick="jslPay.exportCSV()">
+            <svg class="icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            CSV
+          </button>
+          <button class="btn btn-ghost btn-sm" onclick="jslPay.exportPDF()">
+            <svg class="icon-sm" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            PDF
+          </button>
+        </div>
+      </div>
+      <div class="card-body" style="padding:12px 18px;border-bottom:1px solid #f1f5f9;">
+        <div class="pay-filters">
+          <div class="field">
+            <label>PO / TRF #</label>
+            <input type="text" id="pf-q" placeholder="Search PO or TRF…" oninput="jslPay.render()">
+          </div>
+          <div class="field">
+            <label>Status</label>
+            <select id="pf-status" onchange="jslPay.render()">
+              <option value="">All statuses</option>
+              <option value="pending">Pending payment</option>
+              <option value="paid">Paid (invoice or manual)</option>
+              <option value="rule">Paid by Sep 20 rule</option>
+              <option value="review">Difference to check</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Type</label>
+            <select id="pf-kind" onchange="jslPay.render()">
+              <option value="">Shipments &amp; transfers</option>
+              <option value="s">Shipments only</option>
+              <option value="t">Transfers only</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Carrier</label>
+            <select id="pf-carrier" onchange="jslPay.render()"><option value="">All carriers</option></select>
+          </div>
+          <div class="field">
+            <label>Requested month</label>
+            <select id="pf-month" onchange="jslPay.render()"><option value="">All months</option></select>
+          </div>
+        </div>
+      </div>
+      <div class="table-scroll-wrap">
+        <table class="data-table" id="pay-table">
+          <thead>
+            <tr>
+              <th class="sortable" onclick="jslPay.sort('date')">Requested</th>
+              <th class="sortable" onclick="jslPay.sort('ref')">PO / TRF #</th>
+              <th class="sortable" onclick="jslPay.sort('vendor')">Vendor / Route</th>
+              <th class="sortable" onclick="jslPay.sort('carrier')">Carrier</th>
+              <th class="sortable" onclick="jslPay.sort('amt')" style="text-align:right;">Approved</th>
+              <th>Invoice #</th>
+              <th class="sortable" onclick="jslPay.sort('inv')" style="text-align:right;">Invoiced</th>
+              <th class="sortable" onclick="jslPay.sort('diff')" style="text-align:right;">Difference</th>
+              <th class="sortable" onclick="jslPay.sort('status')">Status</th>
+              <th style="text-align:right;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="pay-tbody"></tbody>
+        </table>
+      </div>
+      <div id="pay-footer" class="pay-footer"></div>
     </div>
   </div>
 </div>
@@ -13832,6 +13932,835 @@ html.fx-off #yk-char .yk-steam path{ opacity:.35; }
 .fx-board-dark .fx-hdmap .maplibregl-ctrl-attrib{ background:rgba(10,15,28,.75); color:#94a3b8; }
 .fx-board-dark .fx-hdmap .maplibregl-ctrl-attrib a{ color:#cbd5e1; }
 </style>
+<style id="jsl-pay-css">
+/* ══ PAYMENTS (Compare Rates → Payments) — additive, scoped to #panel-compare ══ */
+#panel-compare .cmp-inner-tabs{ margin-bottom:16px; }
+#panel-compare .inner-tab:hover{ background:rgba(234,88,12,.08); color:#c2410c; }
+html body #panel-compare .inner-tab.active{ color:#fff !important; background:linear-gradient(135deg,#f47a2e,#ea580c 60%,#d64c07);
+  box-shadow:0 8px 18px -8px rgba(234,88,12,.75), 0 1px 0 rgba(255,255,255,.25) inset; border-bottom-color:transparent; }
+#panel-compare .pay-tab-count{ display:inline-block; min-width:18px; padding:0 6px; margin-left:6px; border-radius:999px; font-size:10.5px; line-height:18px;
+  text-align:center; background:#fee2e2; color:#b91c1c; font-weight:700; }
+#panel-compare .inner-tab.active .pay-tab-count{ background:rgba(255,255,255,.25); color:#fff; }
+#panel-compare .pay-tab-count:empty{ display:none; }
+
+#cmp-pay-pane .pay-hint{ font-size:11.5px; color:#94a3b8; font-weight:500; }
+#cmp-pay-pane .pay-drop{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; text-align:center; cursor:pointer;
+  padding:26px 20px; border:1.5px dashed #fdba74; border-radius:14px; background:linear-gradient(180deg,#fff7ed,#fffbf7);
+  transition:border-color .2s, background .2s, transform .25s; }
+#cmp-pay-pane .pay-drop:hover, #cmp-pay-pane .pay-drop.drag{ border-color:#ea580c; background:#ffedd5; }
+#cmp-pay-pane .pay-drop.drag{ transform:scale(1.005); }
+#cmp-pay-pane .pay-drop-ico{ width:34px; height:34px; fill:none; stroke:#ea580c; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+#cmp-pay-pane .pay-drop-title{ font-size:14px; font-weight:700; color:#1e293b; }
+#cmp-pay-pane .pay-drop-sub{ font-size:12px; color:#64748b; max-width:560px; line-height:1.5; }
+#cmp-pay-pane .pay-drop-btn{ margin-top:6px; pointer-events:none; }
+
+#cmp-pay-pane .pay-drop-card, #pay-metrics{ margin-bottom:16px; }
+#pay-results{ display:flex; flex-direction:column; gap:12px; }
+#pay-results:not(:empty){ margin-top:14px; }
+.pay-result{ border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; background:#fff; box-shadow:0 1px 2px rgba(15,23,42,.04); }
+.pay-result.ok{ border-color:#bbf7d0; }
+.pay-result.warn{ border-color:#fde68a; }
+.pay-result.err{ border-color:#fecaca; }
+.pay-res-hd{ display:flex; align-items:center; gap:10px; padding:10px 14px; font-size:12.5px; font-weight:700; border-bottom:1px solid #f1f5f9; }
+.pay-result.ok .pay-res-hd{ background:#f0fdf4; color:#15803d; }
+.pay-result.warn .pay-res-hd{ background:#fffbeb; color:#b45309; }
+.pay-result.err .pay-res-hd{ background:#fef2f2; color:#b91c1c; }
+.pay-result.busy .pay-res-hd, .pay-result.muted .pay-res-hd{ background:#f8fafc; color:#475569; }
+.pay-res-hd .pay-res-file{ font-weight:500; color:#94a3b8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0; }
+.pay-res-hd .btn{ flex:none; }
+.pay-res-body{ display:grid; grid-template-columns:150px 1fr; gap:16px; padding:14px; }
+.pay-res-thumb{ border:1px solid #e2e8f0; border-radius:8px; overflow:hidden; background:#f8fafc; align-self:start; cursor:zoom-in; }
+.pay-res-thumb img{ display:block; width:100%; height:auto; }
+.pay-ap{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-bottom:12px; }
+.pay-ap > div{ background:#fff7ed; border:1px solid #ffedd5; border-radius:10px; padding:9px 12px; min-width:0; }
+.pay-k{ font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:#9a3412; opacity:.8; }
+.pay-v{ font-size:15px; font-weight:800; color:#0f172a; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pay-det{ display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; font-size:12px; }
+.pay-det .pay-k{ color:#64748b; }
+.pay-det .pay-v{ font-size:13px; font-weight:700; }
+.pay-diff-pos{ color:#b91c1c !important; }
+.pay-diff-neg{ color:#1d4ed8 !important; }
+.pay-diff-zero{ color:#15803d !important; }
+.pay-lines{ margin-top:10px; font-size:11.5px; color:#475569; display:flex; flex-wrap:wrap; gap:6px; }
+.pay-lines span{ background:#f1f5f9; border-radius:6px; padding:3px 8px; }
+.pay-via{ margin-top:10px; font-size:11.5px; color:#64748b; }
+.pay-flags{ padding:0 14px 14px; display:flex; flex-direction:column; gap:6px; }
+.pay-flag{ font-size:12px; line-height:1.45; padding:8px 11px; border-radius:8px; background:#fef2f2; color:#991b1b; border:1px solid #fee2e2; }
+.pay-flag.info{ background:#eff6ff; color:#1e40af; border-color:#dbeafe; }
+.pay-choices{ padding:12px 14px; display:flex; flex-direction:column; gap:8px; font-size:12.5px; color:#334155; }
+.pay-choices .pay-choice-row{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.pay-choices select{ border:1.5px solid #e2e8f0; border-radius:8px; padding:7px 10px; font-size:12.5px; font-family:inherit; min-width:280px; }
+.pay-spin{ width:14px; height:14px; border-radius:50%; border:2px solid #cbd5e1; border-top-color:#ea580c; animation:paySpin .8s linear infinite; flex:none; }
+@keyframes paySpin{ to{ transform:rotate(360deg); } }
+
+#cmp-pay-pane .pay-filters{ display:grid; grid-template-columns:1.2fr 1fr 1fr 1fr 1fr; gap:12px; align-items:end; }
+#cmp-pay-pane .pay-filters input{ border:1.5px solid #e2e8f0; border-radius:8px; padding:8px 10px; font-size:13px; font-family:inherit; width:100%; outline:none; }
+#pay-table td.num, #pay-table th.num{ text-align:right; font-variant-numeric:tabular-nums; }
+#pay-table td{ vertical-align:top; }
+#pay-table .pay-row-actions{ display:flex; gap:6px; justify-content:flex-end; flex-wrap:wrap; }
+#pay-table .pay-row-actions .btn{ padding:4px 9px; font-size:11px; }
+#pay-table .pay-reasons{ margin-top:4px; font-size:11px; color:#b91c1c; line-height:1.4; max-width:340px; white-space:normal; }
+#pay-table .pay-sub{ font-size:10.5px; color:#94a3b8; margin-top:2px; }
+#pay-table tr.pay-hl td{ animation:payHl 2.4s ease; }
+@keyframes payHl{ 0%,40%{ background:#ffedd5; } 100%{ background:transparent; } }
+.pay-footer{ padding:12px 18px; border-top:1px solid #f1f5f9; font-size:12px; color:#94a3b8; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.pay-footer b{ color:#334155; }
+
+@media (max-width:900px){
+  .pay-res-body{ grid-template-columns:1fr; }
+  .pay-res-thumb{ max-width:220px; }
+  .pay-ap{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .pay-det{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+  #cmp-pay-pane .pay-filters{ grid-template-columns:1fr 1fr; }
+  #pay-metrics{ grid-template-columns:repeat(2,1fr) !important; }
+}
+@media (prefers-reduced-motion:reduce){ .pay-spin, #pay-table tr.pay-hl td{ animation:none; } }
+</style>
+<script id="jsl-pay-js">
+/* ══════════════════════════════════════════════════════════════════════
+   PAYMENTS — Compare Rates → Payments sub-tab
+   Tracks carrier payment for every approved shipment and transfer.
+   • Rule: anything REQUESTED on or before Sep 20 2026 counts as paid
+     (computed on the fly — nothing is written to existing records).
+   • Upload a carrier invoice (PDF or screenshot): the PO / TRF number and
+     carrier are read, the record is found and marked as paid. Every
+     difference vs the approved amount is flagged to check with the
+     carrier or the vendor.
+   • Stores one new field per record: `payment` (shipment / transfer object).
+     Saved through the existing saveToStorage() → localStorage + Supabase.
+   Self-contained: touches no existing function except thin wrappers on
+   switchTab / updateHeaderStats that only add a refresh call afterwards.
+   ══════════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  var RULE_CUTOFF = '2026-09-20';
+  var RULE_LABEL  = 'Sep 20 rule';
+  var PDFJS_BASE  = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+
+  var ui = { sortKey:'date', sortDir:-1, jobs:[], running:false, hl:null };
+
+  /* ── small helpers ─────────────────────────────────────────────────── */
+  function h(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); }
+  function money(v){ return (typeof fmtMoney === 'function') ? fmtMoney(v) : ('$' + Number(v || 0).toFixed(2)); }
+  function r2(n){ return Math.round((Number(n) || 0) * 100) / 100; }
+  function norm(x){ return String(x == null ? '' : x).toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+  function normPo(x){ var n = norm(x); return /^\d+$/.test(n) ? n.replace(/^0+(?=\d)/, '') : n; }
+  function letters(x){ return String(x || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+  function fmtD(iso){ if (!iso || !/^\d{4}-\d{2}-\d{2}/.test(iso)) return '—'; var p = iso.slice(0, 10).split('-'); return p[1] + '/' + p[2] + '/' + p[0]; }
+  function today(){ var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function toast(m, k){ try { if (typeof showToast === 'function') showToast(m, k || ''); } catch(e){} }
+  function save(){ try { if (typeof saveToStorage === 'function') saveToStorage(); } catch(e){ console.error('[Payments] save failed', e); } }
+  function $(id){ return document.getElementById(id); }
+  function isoFrom(str){
+    if (!str) return null;
+    str = String(str).trim();
+    var m = str.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return m[1] + '-' + m[2] + '-' + m[3];
+    m = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+    if (m){ var y = m[3].length === 2 ? '20' + m[3] : m[3]; return y + '-' + m[1].padStart(2, '0') + '-' + m[2].padStart(2, '0'); }
+    var d = new Date(str.replace(/\./g, ''));
+    if (isNaN(d)) return null;
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function num(v){ if (v == null || v === '') return null; var n = typeof v === 'number' ? v : parseFloat(String(v).replace(/[^0-9.\-]/g, '')); return isFinite(n) ? r2(n) : null; }
+
+  /* ── records: every shipment + transfer, normalized ───────────────── */
+  function allRecords(){
+    var out = [];
+    try { (shipments || []).forEach(function(s){ out.push({ kind:'s', key:'s' + s.id, obj:s, id:s.id, date:s.date || '', ref:s.po || '', vendor:s.vendor || '', carrier:s.approved || '', amt:+s.approvedAmt || 0 }); }); } catch(e){}
+    try { (transfers || []).forEach(function(t){ out.push({ kind:'t', key:'t' + t.id, obj:t, id:t.id, date:t.date || '', ref:t.ref || '', vendor:(t.from || '?') + ' → ' + (t.to || '?'), carrier:t.approved || '', amt:+t.approvedAmt || 0 }); }); } catch(e){}
+    return out;
+  }
+  function listed(r){ return r.amt > 0 || !!r.obj.payment; }
+  function byKey(key){ var a = allRecords(); for (var i = 0; i < a.length; i++) if (a[i].key === key) return a[i]; return null; }
+  function refLabel(r){ return r.kind === 't' ? (r.ref || ('Transfer #' + r.id)) : ('PO ' + (r.ref || '—')); }
+  function carrierLabel(r){ return r.carrier === 'Vendor' ? 'Vendor (' + (r.obj.vendor || 'vendor') + ')' : (r.carrier || '—'); }
+
+  function payStatus(r){
+    var p = r.obj.payment;
+    if (p && p.status === 'paid') return 'paid';
+    if (p && p.status === 'unpaid') return 'pending';
+    if (r.date && r.date <= RULE_CUTOFF) return 'rule';
+    return 'pending';
+  }
+  function invoices(r){ var p = r.obj.payment; return (p && Array.isArray(p.invoices)) ? p.invoices : []; }
+  function invoicedTotal(r){ var inv = invoices(r); if (!inv.length) return null; return r2(inv.reduce(function(a, i){ return a + (Number(i.amount) || 0); }, 0)); }
+  function diffOf(r){ var t = invoicedTotal(r); return t == null ? null : r2(t - r.amt); }
+  function needsReview(r){ var p = r.obj.payment; if (!p) return false; var any = invoices(r).some(function(i){ return i.flags && i.flags.length; }); return any && !p.reviewChecked; }
+  function reviewReasons(r){ var out = []; invoices(r).forEach(function(i){ (i.flags || []).forEach(function(f){ out.push(f); }); }); return out; }
+
+  /* ════════════════════════════════════════════════════════════════════
+     TABLE + KPIs
+     ════════════════════════════════════════════════════════════════════ */
+  function filters(){
+    return {
+      q: norm(($('pf-q') || {}).value || ''),
+      status: ($('pf-status') || {}).value || '',
+      kind: ($('pf-kind') || {}).value || '',
+      carrier: ($('pf-carrier') || {}).value || '',
+      month: ($('pf-month') || {}).value || ''
+    };
+  }
+  function passBase(r, f){
+    if (f.kind && r.kind !== f.kind) return false;
+    if (f.carrier && r.carrier !== f.carrier) return false;
+    if (f.month && (r.date || '').slice(0, 7) !== f.month) return false;
+    if (f.q && norm(r.ref).indexOf(f.q) < 0) return false;
+    return true;
+  }
+  function passStatus(r, f){
+    if (!f.status) return true;
+    if (f.status === 'review') return needsReview(r);
+    return payStatus(r) === f.status;
+  }
+  function filteredRows(){
+    var f = filters();
+    var rows = allRecords().filter(listed).filter(function(r){ return passBase(r, f) && passStatus(r, f); });
+    var k = ui.sortKey, d = ui.sortDir;
+    var rank = { pending:0, paid:1, rule:2 };
+    rows.sort(function(a, b){
+      var va, vb;
+      if (k === 'amt'){ va = a.amt; vb = b.amt; }
+      else if (k === 'inv'){ va = invoicedTotal(a) || 0; vb = invoicedTotal(b) || 0; }
+      else if (k === 'diff'){ va = diffOf(a) || 0; vb = diffOf(b) || 0; }
+      else if (k === 'status'){ va = (needsReview(a) ? -1 : 0) + rank[payStatus(a)]; vb = (needsReview(b) ? -1 : 0) + rank[payStatus(b)]; }
+      else if (k === 'ref'){ va = String(a.ref); vb = String(b.ref); return d * va.localeCompare(vb, undefined, { numeric:true }); }
+      else { va = String(a[k] || ''); vb = String(b[k] || ''); }
+      if (va < vb) return -1 * d; if (va > vb) return 1 * d; return 0;
+    });
+    return rows;
+  }
+
+  function statusText(r){
+    var s = payStatus(r), p = r.obj.payment;
+    if (s === 'paid') return (p && p.paidBy === 'manual' && !invoices(r).length) ? 'Paid — manual' : 'Paid — invoice';
+    if (s === 'rule') return 'Paid — ' + RULE_LABEL;
+    return 'Pending payment';
+  }
+  function statusBadge(r){
+    var s = payStatus(r);
+    var cls = s === 'paid' ? 'badge-green' : s === 'rule' ? 'badge-gray' : 'badge-gold';
+    var html = '<span class="badge ' + cls + '">' + h(statusText(r)) + '</span>';
+    if (needsReview(r)) html += ' <span class="badge badge-red" title="' + h(reviewReasons(r).join('\n')) + '">Check difference</span>';
+    var p = r.obj.payment;
+    if (p && p.paidAt && s === 'paid') html += '<div class="pay-sub">on ' + h(fmtD(p.paidAt.slice(0, 10))) + '</div>';
+    return html;
+  }
+
+  function fillSelect(id, values, allLabel, fmt){
+    var el = $(id); if (!el) return;
+    var cur = el.value;
+    el.innerHTML = '<option value="">' + h(allLabel) + '</option>' + values.map(function(v){ return '<option value="' + h(v) + '">' + h(fmt ? fmt(v) : v) + '</option>'; }).join('');
+    if (values.indexOf(cur) >= 0) el.value = cur;
+  }
+  function monthName(m){ var p = m.split('-'); return ['January','February','March','April','May','June','July','August','September','October','November','December'][+p[1] - 1] + ' ' + p[0]; }
+
+  function renderMetrics(){
+    var el = $('pay-metrics'); if (!el) return;
+    var f = filters(); f.status = '';
+    var rows = allRecords().filter(listed).filter(function(r){ return passBase(r, f); });
+    var pend = rows.filter(function(r){ return payStatus(r) === 'pending'; });
+    var paid = rows.filter(function(r){ return payStatus(r) === 'paid'; });
+    var rule = rows.filter(function(r){ return payStatus(r) === 'rule'; });
+    var rev  = rows.filter(needsReview);
+    function sum(a, fn){ return a.reduce(function(t, r){ return t + (fn(r) || 0); }, 0); }
+    var revNet = sum(rev, diffOf);
+    el.innerHTML =
+      '<div class="metric-card"><div class="metric-lbl">Pending payment</div><div class="metric-val" style="font-size:20px;">' + h(money(sum(pend, function(r){ return r.amt; }))) + '</div><div class="metric-sub">' + pend.length + ' record' + (pend.length === 1 ? '' : 's') + ' awaiting invoice</div></div>' +
+      '<div class="metric-card"><div class="metric-lbl">Paid — invoice / manual</div><div class="metric-val" style="font-size:20px;">' + h(money(sum(paid, function(r){ var t = invoicedTotal(r); return t == null ? r.amt : t; }))) + '</div><div class="metric-sub">' + paid.length + ' record' + (paid.length === 1 ? '' : 's') + '</div></div>' +
+      '<div class="metric-card"><div class="metric-lbl">Differences to check</div><div class="metric-val" style="font-size:20px;' + (rev.length ? 'color:#b91c1c;' : '') + '">' + (rev.length ? (revNet > 0 ? '+' : '') + h(money(revNet)) : '$0.00') + '</div><div class="metric-sub">' + rev.length + ' with the carrier / vendor</div></div>' +
+      '<div class="metric-card"><div class="metric-lbl">Paid by ' + RULE_LABEL + '</div><div class="metric-val" style="font-size:20px;">' + h(money(sum(rule, function(r){ return r.amt; }))) + '</div><div class="metric-sub">' + rule.length + ' requested on or before 09/20/2026</div></div>';
+  }
+
+  function updateTabCount(){
+    var el = $('pay-tab-count'); if (!el) return;
+    var n = 0; try { n = allRecords().filter(needsReview).length; } catch(e){}
+    el.textContent = n ? String(n) : '';
+    el.title = n ? n + ' invoice difference' + (n === 1 ? '' : 's') + ' to check' : '';
+  }
+
+  function render(){
+    var tb = $('pay-tbody'); if (!tb) return;
+    var all = allRecords().filter(listed);
+    var carriers = all.map(function(r){ return r.carrier; }).filter(Boolean).filter(function(v, i, a){ return a.indexOf(v) === i; }).sort();
+    var months = all.map(function(r){ return (r.date || '').slice(0, 7); }).filter(function(v){ return /^\d{4}-\d{2}$/.test(v); }).filter(function(v, i, a){ return a.indexOf(v) === i; }).sort().reverse();
+    fillSelect('pf-carrier', carriers, 'All carriers');
+    fillSelect('pf-month', months, 'All months', monthName);
+    renderMetrics();
+    updateTabCount();
+    var rows = filteredRows();
+    if (!rows.length){
+      tb.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:28px;color:#94a3b8;">No records match these filters.</td></tr>';
+    } else {
+      tb.innerHTML = rows.map(rowHtml).join('');
+    }
+    var foot = $('pay-footer');
+    if (foot){
+      var tot = rows.reduce(function(a, r){ return a + r.amt; }, 0);
+      var unapproved = allRecords().length - all.length;
+      foot.innerHTML = '<span><b>' + rows.length + '</b> record' + (rows.length === 1 ? '' : 's') + ' · approved total <b>' + h(money(tot)) + '</b></span>' +
+        (unapproved ? '<span>' + unapproved + ' record' + (unapproved === 1 ? '' : 's') + ' without an approved carrier amount are not listed</span>' : '');
+    }
+    if (ui.hl){
+      var tr = tb.querySelector('tr[data-key="' + ui.hl + '"]');
+      if (tr){ tr.classList.add('pay-hl'); }
+      ui.hl = null;
+    }
+  }
+
+  function rowHtml(r){
+    var inv = invoices(r), tot = invoicedTotal(r), d = diffOf(r), s = payStatus(r), p = r.obj.payment;
+    var invNos = inv.map(function(i){ return i.number || '(no #)'; }).join(', ');
+    var diffCell = d == null ? '<span style="color:#cbd5e1;">—</span>' :
+      '<span class="' + (Math.abs(d) < 0.005 ? 'pay-diff-zero' : d > 0 ? 'pay-diff-pos' : 'pay-diff-neg') + '" style="font-weight:700;">' + (d > 0 ? '+' : '') + h(money(d)) + '</span>';
+    var acts = [];
+    var file = inv.filter(function(i){ return i.fileUrl; }).slice(-1)[0];
+    if (file) acts.push('<button class="btn btn-ghost btn-sm" onclick="jslPay.openFile(\'' + r.key + '\')">Invoice</button>');
+    if (needsReview(r)) acts.push('<button class="btn btn-ghost btn-sm" onclick="jslPay.markChecked(\'' + r.key + '\')" title="The difference was checked with the carrier / vendor">Checked</button>');
+    if (s === 'pending') acts.push('<button class="btn btn-ghost btn-sm" onclick="jslPay.markPaid(\'' + r.key + '\')">Mark paid</button>');
+    if (s === 'paid') acts.push('<button class="btn btn-ghost btn-sm" onclick="jslPay.markUnpaid(\'' + r.key + '\')">Undo</button>');
+    if (s === 'rule') acts.push('<button class="btn btn-ghost btn-sm" onclick="jslPay.markNotPaid(\'' + r.key + '\')" title="Exclude from the Sep 20 rule — this one was not paid">Not paid</button>');
+    if (s === 'pending' && p && p.status === 'unpaid') acts.push('<button class="btn btn-ghost btn-sm" onclick="jslPay.clearOverride(\'' + r.key + '\')" title="Back to the Sep 20 rule">Use rule</button>');
+    var reasons = needsReview(r) ? '<div class="pay-reasons">' + reviewReasons(r).map(h).join('<br>') + '</div>' : '';
+    var checked = (p && p.reviewChecked) ? '<div class="pay-sub">Difference checked ' + h(fmtD(p.reviewChecked.at.slice(0, 10))) + '</div>' : '';
+    return '<tr data-key="' + r.key + '">' +
+      '<td>' + h(fmtD(r.date)) + '</td>' +
+      '<td><b>' + h(r.ref || '—') + '</b>' + (r.kind === 't' ? ' <span class="badge badge-gold">Transfer</span>' : '') + '</td>' +
+      '<td>' + h(r.vendor || '—') + '</td>' +
+      '<td>' + h(carrierLabel(r)) + '</td>' +
+      '<td class="num">' + (r.amt ? h(money(r.amt)) : '<span style="color:#cbd5e1;">—</span>') + '</td>' +
+      '<td>' + (invNos ? h(invNos) : '<span style="color:#cbd5e1;">—</span>') + (inv.length && inv[inv.length - 1].dueDate ? '<div class="pay-sub">due ' + h(fmtD(inv[inv.length - 1].dueDate)) + '</div>' : '') + '</td>' +
+      '<td class="num">' + (tot == null ? '<span style="color:#cbd5e1;">—</span>' : h(money(tot))) + '</td>' +
+      '<td class="num">' + diffCell + '</td>' +
+      '<td>' + statusBadge(r) + checked + reasons + '</td>' +
+      '<td><div class="pay-row-actions">' + acts.join('') + '</div></td>' +
+    '</tr>';
+  }
+
+  /* ── row actions ───────────────────────────────────────────────────── */
+  function markPaid(key){
+    var r = byKey(key); if (!r) return;
+    var p = r.obj.payment || {};
+    r.obj.payment = { status:'paid', paidBy: (p.invoices && p.invoices.length) ? 'invoice' : 'manual', paidAt:new Date().toISOString(), invoices:p.invoices || [], reviewChecked:p.reviewChecked || null };
+    save(); ui.hl = key; render(); toast(refLabel(r) + ' marked as paid', 'success');
+  }
+  function markUnpaid(key){
+    var r = byKey(key); if (!r) return;
+    var inv = invoices(r);
+    if (inv.length && !window.confirm('Remove the payment for ' + refLabel(r) + ' and its ' + inv.length + ' uploaded invoice' + (inv.length === 1 ? '' : 's') + '?')) return;
+    inv.forEach(function(i){ if (i.fileUrl && typeof _saDeleteFromStorage === 'function') _saDeleteFromStorage(i.fileUrl); });
+    // requested on/before the cutoff → explicitly not paid (otherwise the rule would mark it paid again)
+    if (r.date && r.date <= RULE_CUTOFF) r.obj.payment = { status:'unpaid', at:new Date().toISOString() };
+    else delete r.obj.payment;
+    save(); ui.hl = key; render(); renderJobs(); toast(refLabel(r) + ' set back to pending', 'info');
+  }
+  function markNotPaid(key){
+    var r = byKey(key); if (!r) return;
+    r.obj.payment = { status:'unpaid', at:new Date().toISOString() };
+    save(); ui.hl = key; render(); toast(refLabel(r) + ' excluded from the Sep 20 rule — now pending', 'info');
+  }
+  function clearOverride(key){
+    var r = byKey(key); if (!r) return;
+    delete r.obj.payment; save(); ui.hl = key; render();
+  }
+  function markChecked(key){
+    var r = byKey(key); if (!r || !r.obj.payment) return;
+    r.obj.payment.reviewChecked = { at:new Date().toISOString() };
+    save(); ui.hl = key; render(); renderJobs(); toast('Difference on ' + refLabel(r) + ' marked as checked', 'success');
+  }
+  function openFile(key){
+    var r = byKey(key); if (!r) return;
+    var f = invoices(r).filter(function(i){ return i.fileUrl; }).slice(-1)[0];
+    if (f) window.open(f.fileUrl, '_blank', 'noopener');
+  }
+  function sortBy(k){ if (ui.sortKey === k) ui.sortDir *= -1; else { ui.sortKey = k; ui.sortDir = (k === 'date' || k === 'diff' || k === 'amt' || k === 'inv') ? -1 : 1; } render(); }
+
+  /* ── exports (respect the active filters) ──────────────────────────── */
+  function exportRows(){
+    return filteredRows().map(function(r){
+      var inv = invoices(r), last = inv[inv.length - 1] || {}, t = invoicedTotal(r), d = diffOf(r);
+      return { r:r, inv:inv, last:last, t:t, d:d };
+    });
+  }
+  function exportCSV(){
+    if (typeof _smExportCSV !== 'function') return;
+    _smExportCSV('JSL_Payments_' + today() + '.csv',
+      ['Requested','Type','PO / TRF #','Vendor / Route','Carrier','Approved ($)','Invoice #','Invoice Date','Due Date','Invoiced ($)','Difference ($)','Status','Paid On','To Check'],
+      function(){ return exportRows().map(function(x){ var r = x.r, p = r.obj.payment || {};
+        return [fmtD(r.date), r.kind === 't' ? 'Transfer' : 'Shipment', r.ref, r.vendor, carrierLabel(r), r.amt ? r.amt.toFixed(2) : '',
+          x.inv.map(function(i){ return i.number || ''; }).join(' | '), x.last.invoiceDate ? fmtD(x.last.invoiceDate) : '', x.last.dueDate ? fmtD(x.last.dueDate) : '',
+          x.t == null ? '' : x.t.toFixed(2), x.d == null ? '' : x.d.toFixed(2), statusText(r),
+          (payStatus(r) === 'paid' && p.paidAt) ? fmtD(p.paidAt.slice(0, 10)) : '', needsReview(r) ? reviewReasons(r).join(' / ') : '' ]; }); });
+  }
+  function exportPDF(){
+    if (typeof _smExportPDF !== 'function') return;
+    var rows = exportRows();
+    var tot = rows.reduce(function(a, x){ return a + x.r.amt; }, 0);
+    var st = ($('pf-status') || {}).value;
+    var title = 'Freight Payments' + (st === 'pending' ? ' — Pending' : st === 'paid' ? ' — Paid' : st === 'rule' ? ' — Paid by Sep 20 rule' : st === 'review' ? ' — Differences to Check' : '');
+    _smExportPDF(title,
+      ['Requested','PO / TRF #','Vendor / Route','Carrier','Status','Invoice #','Invoiced','Difference','Approved'],
+      function(){ return rows.map(function(x){ var r = x.r;
+        return [fmtD(r.date), r.ref, r.vendor, carrierLabel(r), statusText(r) + (needsReview(r) ? ' · check difference' : ''),
+          x.inv.map(function(i){ return i.number || ''; }).join(', ') || '—', x.t == null ? '—' : money(x.t),
+          x.d == null ? '—' : (x.d > 0 ? '+' : '') + money(x.d), money(r.amt)]; }); },
+      ['Approved total · ' + rows.length + ' records', money(tot)]);
+  }
+
+  /* ════════════════════════════════════════════════════════════════════
+     INVOICE READER
+     ════════════════════════════════════════════════════════════════════ */
+  var _pdfjs = null;
+  function loadPdfJs(){
+    if (window.pdfjsLib && window.pdfjsLib.getDocument) return Promise.resolve(window.pdfjsLib);
+    if (_pdfjs) return _pdfjs;
+    _pdfjs = new Promise(function(res, rej){
+      var s = document.createElement('script');
+      s.src = PDFJS_BASE + 'pdf.min.js'; s.async = true; s.crossOrigin = 'anonymous';
+      s.onload = function(){
+        if (!window.pdfjsLib){ _pdfjs = null; return rej(new Error('PDF reader failed to load')); }
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_BASE + 'pdf.worker.min.js';
+        res(window.pdfjsLib);
+      };
+      s.onerror = function(){ _pdfjs = null; rej(new Error('Could not load the PDF reader — check your internet connection')); };
+      document.head.appendChild(s);
+    });
+    return _pdfjs;
+  }
+  function b64ToBytes(b64){ var bin = atob(b64), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
+  function fileToB64(file){ return new Promise(function(res, rej){ var fr = new FileReader(); fr.onload = function(){ res(String(fr.result).split(',')[1] || ''); }; fr.onerror = function(){ rej(fr.error); }; fr.readAsDataURL(file); }); }
+
+  // Text of the first pages, rebuilt line by line (same y → same line) so
+  // "Amount Due:  5,140.00" stays together, plus page 1 rendered as an image.
+  async function readPdf(b64){
+    var lib = await loadPdfJs();
+    var doc = await lib.getDocument({ data:b64ToBytes(b64) }).promise;
+    var lines = [];
+    for (var p = 1; p <= Math.min(doc.numPages, 3); p++){
+      var page = await doc.getPage(p);
+      var tc = await page.getTextContent();
+      var rows = {};
+      tc.items.forEach(function(it){
+        if (!it.str || !it.str.trim()) return;
+        var y = Math.round(it.transform[5] / 3) * 3;
+        (rows[y] = rows[y] || []).push({ x:it.transform[4], s:it.str });
+      });
+      Object.keys(rows).map(Number).sort(function(a, b){ return b - a; }).forEach(function(y){
+        lines.push(rows[y].sort(function(a, b){ return a.x - b.x; }).map(function(o){ return o.s; }).join('  ').replace(/\s{3,}/g, '   '));
+      });
+    }
+    var first = await doc.getPage(1);
+    var vp0 = first.getViewport({ scale:1 });
+    var scale = Math.min(2.2, 1400 / vp0.width);
+    var vp = first.getViewport({ scale:scale });
+    var c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+    var ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+    await first.render({ canvasContext:ctx, viewport:vp }).promise;
+    var png = c.toDataURL('image/png').split(',')[1];
+    var thumb = c.toDataURL('image/jpeg', 0.75);
+    try { doc.destroy(); } catch(e){}
+    return { text:lines.join('\n'), png:png, thumb:thumb };
+  }
+
+  /* ── deterministic read of the PDF text ── */
+  var DATE_RE = '([A-Za-z]{3,9}\\.?\\s+\\d{1,2},?\\s+\\d{4}|\\d{1,2}\\/\\d{1,2}\\/\\d{2,4}|\\d{4}-\\d{2}-\\d{2})';
+  function parseText(text){
+    var T = String(text || '').replace(/[ \t]+/g, ' ');
+    var out = {};
+    var m = T.match(/INVOICE\s*(?:NUMBER|NO\.?|#)\s*:?\s*#?\s*([A-Z0-9][A-Z0-9\-]{3,})/i);
+    if (m) out.invoiceNo = m[1];
+    var labels = ['AMOUNT DUE','BALANCE DUE','TOTAL DUE','INVOICE TOTAL','TOTAL AMOUNT','TOTAL'];
+    for (var i = 0; i < labels.length && out.total == null; i++){
+      m = T.match(new RegExp('\\b' + labels[i].replace(' ', '\\s+') + '\\s*:?\\s*(?:USD\\s*)?\\$?\\s*(-?[\\d,]+\\.\\d{2})', 'i'));
+      if (m) out.total = num(m[1]);
+    }
+    m = T.match(new RegExp('INVOICE\\s+DATE\\s*:?\\s*' + DATE_RE, 'i')); if (m) out.invoiceDate = isoFrom(m[1]);
+    m = T.match(new RegExp('(?:PAYMENT\\s+DUE|DUE\\s+DATE|DATE\\s+DUE|PAY\\s+BY)\\s*:?\\s*' + DATE_RE, 'i')); if (m) out.dueDate = isoFrom(m[1]);
+    return out;
+  }
+
+  // Accessorial charges straight from the PDF text (used when the AI is not available)
+  function textAccessorials(text){
+    var out = [];
+    String(text || '').split('\n').forEach(function(line){
+      if (!/detention|layover|lumper|tonu|truck\s+order\s+not\s+used|redeliver|storage|reconsign|extra\s+stop|stop\s+off|driver\s+assist|wait\s+time/i.test(line)) return;
+      var m = line.match(/(-?[\d,]+\.\d{2})\s*(?:USD)?\s*$/i); if (!m) return;
+      out.push({ d: line.replace(/\s{2,}.*$/, '').replace(/^[A-Z0-9]{1,5}\s*-\s*/, '').trim() || 'Accessorial', a: num(m[1]) });
+    });
+    return out;
+  }
+
+  /* ── every reference on the invoice: strong = labeled, weak = bare number ── */
+  var LBL = '(?:P\\.?\\s?O\\.?(?:\\s*NUMBER)?|PURCHASE\\s+ORDER|BILL[\\s-]*TO\\s+REF(?:ERENCE)?|CUSTOMER\\s+REF(?:ERENCE)?|ITEM\\s+REF|SHIP(?:PER|MENT)?\\s*ID|REFERENCE|REF|LOAD|BOL|B\\/L|PRO)';
+  function collectRefs(text, aiRefs){
+    var strong = {}, weak = {}, trfDates = [], shown = [];
+    function addStrong(v, label){ var k = normPo(v); if (!k || !/\d/.test(k)) return; if (!strong[k]){ strong[k] = label; shown.push((label ? label + ': ' : '') + v); } }
+    (aiRefs || []).forEach(function(x){
+      var v = (x && typeof x === 'object') ? x.value : x, lab = (x && typeof x === 'object' && x.label) ? String(x.label) : 'Reference';
+      if (v == null) return; v = String(v).trim();
+      addStrong(v, lab);
+      var t = v.match(/TRF\s*[-#:]?\s*(\d{1,2})\s*[-\/.]\s*(\d{1,2})\b/i); if (t) trfDates.push(t[1].padStart(2, '0') + '-' + t[2].padStart(2, '0'));
+    });
+    var T = String(text || '');
+    var re = new RegExp('\\b' + LBL + '(?![A-Z])\\s*(?:#|NO\\.?|NUMBER)?\\s*[:#]?\\s*([A-Z0-9][A-Z0-9\\-\\/]{1,19})', 'gi'), m;
+    while ((m = re.exec(T))){ var lab = m[0].replace(/[:#]?\s*[A-Z0-9][A-Z0-9\-\/]*$/i, '').trim(); addStrong(m[1], lab); }
+    var tr = /\bTRF\s*[-#:]?\s*(\d{1,2})\s*[-\/.]\s*(\d{1,2})\b/gi;
+    while ((m = tr.exec(T))) trfDates.push(m[1].padStart(2, '0') + '-' + m[2].padStart(2, '0'));
+    var bare = /(?<![\d,.$])\d{3,10}(?![\d,]|\.\d)/g;
+    while ((m = bare.exec(T))){ var k = normPo(m[0]); if (!strong[k]) weak[k] = 'number on the invoice'; }
+    return { strong:strong, weak:weak, trfDates:trfDates, shown:shown, text:T };
+  }
+
+  // A transfer ref like "TRF 10-08" / "TRF OCT/2" is searched for in the
+  // text with any spacing or punctuation between its characters.
+  function refInText(ref, T){
+    var chars = norm(ref).split(''); if (chars.length < 4) return false;
+    var pat = '(?<![A-Z0-9])' + chars.map(function(c){ return c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('[\\s\\-\\/#:.]*') + '(?![A-Z0-9])';
+    try { return new RegExp(pat, 'i').test(T); } catch(e){ return false; }
+  }
+
+  function detectCarrier(T){
+    var L = letters(T), best = null;
+    var names = allRecords().map(function(r){ return r.carrier; }).filter(function(c){ return c && c !== 'Vendor'; })
+      .filter(function(v, i, a){ return a.indexOf(v) === i; });
+    names.forEach(function(n){ var k = letters(n); if (k.length >= 4 && L.indexOf(k) >= 0 && (!best || k.length > letters(best).length)) best = n; });
+    return best;
+  }
+  function carrierMatches(r, carrierText){
+    var c = letters(carrierText); if (!c) return null;     // unknown → can't judge
+    if (r.carrier === 'Vendor'){ var v = letters(r.obj.vendor); return !!(v && (c.indexOf(v) >= 0 || v.indexOf(c) >= 0)); }
+    var a = letters(r.carrier); if (!a) return null;
+    if (c.indexOf(a) >= 0 || (c.length >= 4 && a.indexOf(c) >= 0)) return true;
+    var words = String(r.carrier).toLowerCase().split(/[^a-z0-9]+/).filter(function(w){ return w.length >= 4 && ['freight','logistics','refrigerated','transport','trucking','company','express'].indexOf(w) < 0; });
+    return words.some(function(w){ return c.indexOf(w) >= 0; });
+  }
+
+  function findMatches(refs, carrierText){
+    var hits = [];
+    allRecords().forEach(function(r){
+      if (!r.ref && r.kind === 's') return;
+      var score = 0, via = null;
+      if (r.kind === 's'){
+        var k = normPo(r.ref);
+        if (refs.strong[k]){ score = 4; via = refs.strong[k] + ' ' + r.ref; }
+        else if (refs.weak[k] && k.length >= 3){ score = 1; via = 'number ' + r.ref + ' found on the invoice (not labeled as PO)'; }
+      } else {
+        var kt = norm(r.ref);
+        if (kt && (refs.strong[kt] || refInText(r.ref, refs.text))){ score = 4; via = r.ref; }
+        else if (refs.trfDates.length){
+          var md = [(r.obj.puDate || '').slice(5, 10), (r.date || '').slice(5, 10)];
+          if (refs.trfDates.some(function(d){ return md.indexOf(d) >= 0; })){ score = 1; via = 'TRF date ' + refs.trfDates[0] + ' = transfer pickup / request date'; }
+        }
+      }
+      if (!score) return;
+      var cm = carrierMatches(r, carrierText);
+      hits.push({ r:r, score:score + (cm ? 2 : 0), strong:score >= 4, via:via, carrierOk:cm });
+    });
+    hits.sort(function(a, b){ return b.score - a.score || String(b.r.date).localeCompare(String(a.r.date)); });
+    return hits;
+  }
+
+  var AI_SYSTEM = 'You read freight carrier invoices billed to JSL Foods (the customer). Return ONLY a JSON object:\n' +
+    '{"carrier": the company that ISSUED the invoice (the trucking / logistics company being paid — never JSL Foods, never the shipper or origin),\n' +
+    ' "invoice_number": string, "invoice_date": "YYYY-MM-DD", "due_date": "YYYY-MM-DD",\n' +
+    ' "total_amount": number (the amount due, no symbols),\n' +
+    ' "references": [{"label": label exactly as printed, "value": value exactly as printed}] — EVERY PO, purchase order, Bill-To Ref, reference, Ship ID, order, load, BOL, PRO and TRF code on the page,\n' +
+    ' "line_items": [{"description": string, "amount": number}]}\n' +
+    'Use null for anything not on the page. Do not invent values.';
+
+  async function readInvoice(job){
+    var isPdf = /pdf/i.test(job.mime) || /\.pdf$/i.test(job.name);
+    var text = '', img = job.b64, imgMime = job.mime, notes = [];
+    if (isPdf){
+      var pdf = await readPdf(job.b64);
+      text = pdf.text; img = pdf.png; imgMime = 'image/png'; job.thumb = pdf.thumb;
+    } else {
+      job.thumb = 'data:' + job.mime + ';base64,' + job.b64;
+    }
+    var key = (typeof loadApiKey === 'function') ? loadApiKey() : '';
+    var ai = null;
+    if (key && window.jslAI && typeof window.jslAI.vision === 'function'){
+      try {
+        var raw = await window.jslAI.vision({ system:AI_SYSTEM, maxTokens:1200, b64:img, mime:imgMime, prompt:'Read this invoice and return the JSON only.' });
+        ai = JSON.parse(raw);
+      } catch(e){
+        if (!text.trim()) throw new Error('AI could not read the image: ' + (e && e.message || e));
+        notes.push('AI was unavailable (' + (e && e.message || e) + ') — read from the PDF text only.');
+      }
+    } else if (!text.trim()){
+      throw new Error(isPdf ? 'This PDF has no readable text (scanned). Add your Groq key in the Data menu so the AI can read it.'
+                            : 'Screenshots need the AI. Add your Groq key in the Data menu — PDFs work without it.');
+    }
+    var tp = parseText(text);
+    ai = ai || {};
+    var lines = Array.isArray(ai.line_items) ? ai.line_items.filter(function(l){ return l && l.description; }).map(function(l){ return { d:String(l.description), a:num(l.amount) }; }) : [];
+    if (!lines.length) lines = textAccessorials(text);
+    var refs = collectRefs(text, ai.references);
+    var carrier = (ai.carrier && String(ai.carrier).trim()) || detectCarrier(text) || '';
+    return {
+      carrier: carrier,
+      invoiceNo: (ai.invoice_number && String(ai.invoice_number).trim()) || tp.invoiceNo || '',
+      invoiceDate: isoFrom(ai.invoice_date) || tp.invoiceDate || null,
+      dueDate: isoFrom(ai.due_date) || tp.dueDate || null,
+      total: num(ai.total_amount) != null ? num(ai.total_amount) : (tp.total != null ? tp.total : null),
+      lines: lines, refs: refs, notes: notes
+    };
+  }
+
+  function findDuplicate(invNo){
+    var k = norm(invNo); if (!k) return null;
+    var a = allRecords();
+    for (var i = 0; i < a.length; i++){
+      var inv = invoices(a[i]);
+      for (var j = 0; j < inv.length; j++) if (norm(inv[j].number) === k) return { r:a[i], inv:inv[j] };
+    }
+    return null;
+  }
+
+  function flagsFor(r, ext, hit, invAmt){
+    var flags = [];
+    var who = (r.carrier && r.carrier !== 'Vendor' ? r.carrier : 'the carrier') + (r.obj.vendor ? ' or the vendor (' + r.obj.vendor + ')' : ' or the vendor');
+    if (invAmt == null) flags.push('Could not read the invoice total — check the amount before paying.');
+    else if (!r.amt) flags.push('No approved amount recorded for ' + refLabel(r) + ' — invoice is ' + money(invAmt) + '. Record the approved rate in Compare Rates and check it with ' + who + '.');
+    else {
+      var total = r2((invoicedTotal(r) || 0) + invAmt), d = r2(total - r.amt);
+      if (Math.abs(d) >= 0.01){
+        var acc = (ext.lines || []).filter(function(l){ return /detention|layover|lumper|accessor|wait|tonu|redeliver|storage|reconsign|stop/i.test(l.d); });
+        flags.push('Invoiced ' + money(total) + ' vs approved ' + money(r.amt) + ' → ' + (d > 0 ? money(d) + ' MORE' : money(-d) + ' LESS') + ' than approved' +
+          (acc.length ? ' (' + acc.map(function(l){ return l.d + (l.a != null ? ' ' + money(l.a) : ''); }).join(', ') + ')' : '') + '. Check it with ' + who + '.');
+      }
+    }
+    if (hit && hit.carrierOk === false && ext.carrier) flags.push('Invoice is from "' + ext.carrier + '" but the approved carrier is ' + carrierLabel(r) + '.');
+    if (r.date && r.date <= RULE_CUTOFF && !(r.obj.payment && r.obj.payment.status === 'unpaid')) flags.push('Requested ' + fmtD(r.date) + ' (on or before Sep 20) — already counted as paid. Make sure it is not paid twice.');
+    if (hit && !hit.strong) flags.push('Matched by ' + hit.via + ' — confirm it is the right ' + (r.kind === 't' ? 'transfer' : 'shipment') + '.');
+    return flags;
+  }
+
+  async function applyInvoice(job, r, hit){
+    var ext = job.ext;
+    var dup = findDuplicate(ext.invoiceNo);
+    if (dup){ job.state = 'dup'; job.dup = dup; renderJobs(); return; }
+    job.state = 'busy'; job.msg = 'Saving invoice to ' + refLabel(r) + '…'; renderJobs();
+    var fileUrl = null, fileNote = '';
+    try {
+      if (typeof _supabaseOk !== 'undefined' && _supabaseOk && typeof _saUploadToStorage === 'function'){
+        fileUrl = await _saUploadToStorage(job.b64, job.mime || 'application/octet-stream', 'pay-' + r.key, job.name);
+        if (!fileUrl) fileNote = 'Invoice file not saved to the cloud' + (typeof _saLastUploadError !== 'undefined' && _saLastUploadError ? ' (' + _saLastUploadError + ')' : '') + ' — the payment is still recorded.';
+      } else fileNote = 'Offline — invoice file not saved to the cloud; the payment is still recorded.';
+    } catch(e){ fileNote = 'Invoice file not saved: ' + (e && e.message || e); }
+    var flags = flagsFor(r, ext, hit, ext.total);
+    var inv = {
+      id: 'inv' + Date.now(), number: ext.invoiceNo || '', invoiceDate: ext.invoiceDate || null, dueDate: ext.dueDate || null,
+      amount: ext.total, carrier: ext.carrier || '', lines: ext.lines || [], matchedVia: hit ? hit.via : 'picked manually',
+      fileUrl: fileUrl, fileName: job.name, uploadedAt: new Date().toISOString(), flags: flags
+    };
+    var p = r.obj.payment && r.obj.payment.status !== 'unpaid' ? r.obj.payment : {};
+    var list = (p.invoices || []).concat([inv]);
+    r.obj.payment = { status:'paid', paidBy:'invoice', paidAt:new Date().toISOString(), invoices:list, reviewChecked: flags.length ? null : (p.reviewChecked || null) };
+    save();
+    job.state = 'done'; job.recKey = r.key; job.invId = inv.id; job.fileNote = fileNote;
+    ui.hl = r.key;
+    render(); renderJobs();
+    toast(refLabel(r) + ' marked as paid' + (flags.length ? ' — ' + flags.length + ' item' + (flags.length === 1 ? '' : 's') + ' to check' : ''), flags.length ? 'warn' : 'success');
+  }
+
+  function undoJob(jobId){
+    var job = ui.jobs.filter(function(j){ return j.id === jobId; })[0]; if (!job || !job.recKey) return;
+    var r = byKey(job.recKey); if (!r || !r.obj.payment) return;
+    var p = r.obj.payment;
+    var gone = (p.invoices || []).filter(function(i){ return i.id === job.invId; })[0];
+    p.invoices = (p.invoices || []).filter(function(i){ return i.id !== job.invId; });
+    if (gone && gone.fileUrl && typeof _saDeleteFromStorage === 'function') _saDeleteFromStorage(gone.fileUrl);
+    if (!p.invoices.length) delete r.obj.payment;
+    save();
+    job.state = 'undone'; ui.hl = r.key; render(); renderJobs();
+    toast('Undone — ' + refLabel(r) + ' is back to ' + statusText(r).toLowerCase(), 'info');
+  }
+
+  async function processJob(job){
+    try {
+      job.state = 'busy'; job.msg = 'Reading invoice…'; renderJobs();
+      job.ext = await readInvoice(job);
+      var hits = findMatches(job.ext.refs, job.ext.carrier);
+      job.hits = hits.slice(0, 6);
+      var top = hits[0], second = hits[1];
+      if (top && (!second || second.score < top.score)){ await applyInvoice(job, top.r, top); return; }
+      job.state = hits.length ? 'choose' : 'none';
+      renderJobs();
+    } catch(e){
+      console.error('[Payments] invoice read failed', e);
+      job.state = 'error'; job.msg = (e && e.message) || String(e); renderJobs();
+    }
+  }
+  async function runQueue(){
+    if (ui.running) return; ui.running = true;
+    try { var j; while ((j = ui.jobs.filter(function(x){ return x.state === 'queued'; })[0])) await processJob(j); }
+    finally { ui.running = false; }
+  }
+  async function handleFiles(list){
+    var files = Array.prototype.slice.call(list || []).filter(function(f){ return /pdf|image\//i.test(f.type) || /\.(pdf|png|jpe?g|webp)$/i.test(f.name || ''); });
+    if (!files.length){ toast('Drop a PDF or an image of the invoice', 'warn'); return; }
+    for (var i = 0; i < files.length; i++){
+      var f = files[i];
+      if (f.size > 10 * 1024 * 1024){ toast((f.name || 'File') + ' is larger than 10 MB', 'error'); continue; }
+      var b64 = await fileToB64(f);
+      ui.jobs.unshift({ id:'j' + Date.now() + i, name:f.name || ('pasted-invoice-' + today() + '.png'), mime:f.type || (/\.pdf$/i.test(f.name || '') ? 'application/pdf' : 'image/png'), b64:b64, state:'queued' });
+    }
+    ui.jobs = ui.jobs.slice(0, 8);
+    renderJobs(); runQueue();
+  }
+  function pickRecord(jobId){
+    var job = ui.jobs.filter(function(j){ return j.id === jobId; })[0]; if (!job) return;
+    var sel = $('pay-pick-' + jobId); if (!sel || !sel.value) { toast('Choose the shipment or transfer first', 'warn'); return; }
+    var r = byKey(sel.value); if (!r) return;
+    var hit = (job.hits || []).filter(function(x){ return x.r.key === r.key; })[0] || { strong:true, via:'picked manually', carrierOk:carrierMatches(r, job.ext.carrier) };
+    applyInvoice(job, r, hit);
+  }
+  function dismissJob(jobId){ ui.jobs = ui.jobs.filter(function(j){ return j.id !== jobId; }); renderJobs(); }
+  function viewJobFile(jobId){
+    var job = ui.jobs.filter(function(j){ return j.id === jobId; })[0]; if (!job) return;
+    var url = (typeof _b64ToBlobUrl === 'function') ? _b64ToBlobUrl(job.b64, job.mime) : '';
+    if (url) window.open(url, '_blank', 'noopener');
+  }
+
+  /* ── result cards ── */
+  function apBlock(r, ext, inv){
+    var d = null;
+    if (ext && ext.total != null && r.amt) d = r2((invoicedTotal(r) || 0) - r.amt);
+    var lastInv = inv || invoices(r).slice(-1)[0] || {};
+    var cls = d == null ? '' : Math.abs(d) < 0.005 ? 'pay-diff-zero' : d > 0 ? 'pay-diff-pos' : 'pay-diff-neg';
+    return '<div class="pay-ap">' +
+        '<div><div class="pay-k">Carrier</div><div class="pay-v" title="' + h(carrierLabel(r)) + '">' + h(carrierLabel(r)) + '</div></div>' +
+        '<div><div class="pay-k">Approved amount</div><div class="pay-v">' + (r.amt ? h(money(r.amt)) : '—') + '</div></div>' +
+        '<div><div class="pay-k">' + (r.kind === 't' ? 'Transfer #' : 'PO #') + '</div><div class="pay-v">' + h(r.ref || '—') + '</div></div>' +
+        '<div><div class="pay-k">' + (r.kind === 't' ? 'Route' : 'Vendor') + '</div><div class="pay-v" title="' + h(r.vendor) + '">' + h(r.vendor || '—') + '</div></div>' +
+      '</div>' +
+      '<div class="pay-det">' +
+        '<div><div class="pay-k">Invoice #</div><div class="pay-v">' + h(ext.invoiceNo || '—') + '</div></div>' +
+        '<div><div class="pay-k">Invoice date</div><div class="pay-v">' + h(fmtD(ext.invoiceDate)) + '</div></div>' +
+        '<div><div class="pay-k">Due date</div><div class="pay-v">' + h(fmtD(ext.dueDate)) + '</div></div>' +
+        '<div><div class="pay-k">Invoice total</div><div class="pay-v">' + (ext.total != null ? h(money(ext.total)) : '—') + '</div></div>' +
+        '<div><div class="pay-k">Difference</div><div class="pay-v ' + cls + '">' + (d == null ? '—' : (d > 0 ? '+' : '') + h(money(d))) + '</div></div>' +
+      '</div>' +
+      (ext.lines && ext.lines.length ? '<div class="pay-lines">' + ext.lines.map(function(l){ return '<span>' + h(l.d) + (l.a != null ? ' · ' + h(money(l.a)) : '') + '</span>'; }).join('') + '</div>' : '') +
+      (lastInv.matchedVia ? '<div class="pay-via">Matched by ' + h(lastInv.matchedVia) + (ext.carrier ? ' · invoice from ' + h(ext.carrier) : '') + '</div>' : '');
+  }
+  function thumbHtml(job){ return job.thumb ? '<div class="pay-res-thumb" onclick="jslPay._view(\'' + job.id + '\')" title="Open the invoice"><img src="' + job.thumb + '" alt="Invoice preview"></div>' : '<div></div>'; }
+  function optionLabel(r){ return refLabel(r) + ' · ' + (r.vendor || '') + ' · ' + carrierLabel(r) + ' · ' + (r.amt ? money(r.amt) : 'no approved amount') + ' · req. ' + fmtD(r.date); }
+
+  function jobHtml(job){
+    var close = '<button class="btn btn-ghost btn-sm" onclick="jslPay._dismiss(\'' + job.id + '\')" title="Hide">✕</button>';
+    if (job.state === 'queued' || job.state === 'busy'){
+      return '<div class="pay-result busy"><div class="pay-res-hd"><span class="pay-spin"></span><span>' + h(job.msg || 'Waiting…') + '</span><span class="pay-res-file">' + h(job.name) + '</span></div></div>';
+    }
+    if (job.state === 'error'){
+      return '<div class="pay-result err"><div class="pay-res-hd"><span>Could not read this invoice</span><span class="pay-res-file">' + h(job.name) + '</span>' + close + '</div>' +
+        '<div class="pay-flags" style="padding-top:12px;"><div class="pay-flag">' + h(job.msg) + '</div></div></div>';
+    }
+    var ext = job.ext || {};
+    if (job.state === 'done' || job.state === 'undone'){
+      var r = byKey(job.recKey); if (!r) return '';
+      var inv = invoices(r).filter(function(i){ return i.id === job.invId; })[0];
+      var flags = inv ? inv.flags || [] : [];
+      var undone = job.state === 'undone';
+      var stateCls = undone ? 'muted' : flags.length ? 'warn' : 'ok';
+      var head = undone ? 'Undone — ' + refLabel(r) + ' is ' + statusText(r).toLowerCase()
+                        : '✓ ' + refLabel(r) + ' marked as paid' + (flags.length ? ' · ' + flags.length + ' to check' : '');
+      return '<div class="pay-result ' + stateCls + '"><div class="pay-res-hd"><span>' + h(head) + '</span><span class="pay-res-file">' + h(job.name) + '</span>' +
+          (!undone ? '<button class="btn btn-ghost btn-sm" onclick="jslPay._undo(\'' + job.id + '\')">Undo</button>' : '') + close + '</div>' +
+        '<div class="pay-res-body">' + thumbHtml(job) + '<div>' + apBlock(r, ext, inv) + '</div></div>' +
+        ((flags.length || job.fileNote || (ext.notes && ext.notes.length)) && !undone ? '<div class="pay-flags">' +
+          flags.map(function(f){ return '<div class="pay-flag">' + h(f) + '</div>'; }).join('') +
+          (ext.notes || []).map(function(f){ return '<div class="pay-flag info">' + h(f) + '</div>'; }).join('') +
+          (job.fileNote ? '<div class="pay-flag info">' + h(job.fileNote) + '</div>' : '') + '</div>' : '') +
+      '</div>';
+    }
+    if (job.state === 'dup'){
+      var dr = job.dup.r;
+      return '<div class="pay-result err"><div class="pay-res-hd"><span>Invoice ' + h(ext.invoiceNo) + ' was already uploaded</span><span class="pay-res-file">' + h(job.name) + '</span>' + close + '</div>' +
+        '<div class="pay-flags" style="padding-top:12px;"><div class="pay-flag">Already recorded on ' + h(refLabel(dr)) + ' (' + h(carrierLabel(dr)) + ') on ' + h(fmtD((job.dup.inv.uploadedAt || '').slice(0, 10))) + '. Nothing was changed — it will not be paid twice.</div></div></div>';
+    }
+    // choose / none → manual pick
+    var cands = (job.hits || []).map(function(x){ return x.r; });
+    var pool = cands.length ? cands : allRecords().filter(listed).filter(function(r){ return payStatus(r) !== 'paid'; })
+      .sort(function(a, b){ return String(b.date).localeCompare(String(a.date)); });
+    var refsShown = (ext.refs && ext.refs.shown.length) ? ext.refs.shown.slice(0, 6).join(' · ') : 'no labeled PO / reference found';
+    var title = job.state === 'choose' ? 'More than one shipment matches — pick the right one' : 'No shipment or transfer matches this invoice';
+    return '<div class="pay-result warn"><div class="pay-res-hd"><span>' + h(title) + '</span><span class="pay-res-file">' + h(job.name) + '</span>' + close + '</div>' +
+      '<div class="pay-res-body">' + thumbHtml(job) + '<div class="pay-choices" style="padding:0;">' +
+        '<div><b>Invoice:</b> ' + h(ext.carrier || 'carrier not read') + ' · #' + h(ext.invoiceNo || '—') + ' · ' + (ext.total != null ? h(money(ext.total)) : 'total not read') + '</div>' +
+        '<div><b>References read:</b> ' + h(refsShown) + '</div>' +
+        '<div class="pay-choice-row"><select id="pay-pick-' + job.id + '"><option value="">— Choose the ' + (job.state === 'choose' ? 'matching record' : 'shipment / transfer (pending first)') + ' —</option>' +
+          pool.slice(0, 300).map(function(r){ return '<option value="' + r.key + '">' + h(optionLabel(r)) + '</option>'; }).join('') + '</select>' +
+          '<button class="btn btn-primary btn-sm" onclick="jslPay._pick(\'' + job.id + '\')">Attach &amp; mark paid</button></div>' +
+      '</div></div></div>';
+  }
+  function renderJobs(){
+    var el = $('pay-results'); if (!el) return;
+    el.innerHTML = ui.jobs.map(jobHtml).join('');
+  }
+
+  /* ════════════════════════════════════════════════════════════════════
+     WIRING
+     ════════════════════════════════════════════════════════════════════ */
+  function payVisible(){
+    var panel = $('panel-compare'), pane = $('cmp-pay-pane');
+    return !!(panel && pane && panel.classList.contains('active') && pane.style.display !== 'none');
+  }
+  function switchPane(id, el){
+    var rates = $('cmp-rates-pane'), pay = $('cmp-pay-pane');
+    if (!rates || !pay) return;
+    rates.style.display = id === 'payments' ? 'none' : '';
+    pay.style.display = id === 'payments' ? '' : 'none';
+    ['ctab-rates', 'ctab-payments'].forEach(function(t){ var x = $(t); if (x) x.classList.remove('active'); });
+    (el || $(id === 'payments' ? 'ctab-payments' : 'ctab-rates')).classList.add('active');
+    if (id === 'payments') render();
+  }
+
+  function init(){
+    var drop = $('pay-drop'), input = $('pay-file');
+    if (!drop || !input) return;
+    input.addEventListener('change', function(){ handleFiles(input.files); input.value = ''; });
+    ['dragenter', 'dragover'].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.add('drag'); }); });
+    ['dragleave', 'drop'].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.remove('drag'); }); });
+    drop.addEventListener('drop', function(e){ if (e.dataTransfer) handleFiles(e.dataTransfer.files); });
+    var pane = $('cmp-pay-pane');
+    if (pane){
+      pane.addEventListener('dragover', function(e){ e.preventDefault(); });
+      pane.addEventListener('drop', function(e){ if (e.target.closest && e.target.closest('#pay-drop')) return; e.preventDefault(); if (e.dataTransfer) handleFiles(e.dataTransfer.files); });
+    }
+    document.addEventListener('paste', function(e){
+      if (!payVisible()) return;
+      var z = $('ai-paste-zone'); if (z && z.classList.contains('active')) return;
+      var tg = e.target && e.target.tagName; if (tg === 'INPUT' || tg === 'TEXTAREA' || (e.target && e.target.isContentEditable)) return;
+      var items = (e.clipboardData && e.clipboardData.items) || [], files = [];
+      for (var i = 0; i < items.length; i++){ if (items[i].kind === 'file'){ var f = items[i].getAsFile(); if (f) files.push(f); } }
+      if (!files.length) return;
+      e.preventDefault(); handleFiles(files);
+    });
+    // refresh when returning to Compare with Payments open
+    if (typeof window.switchTab === 'function'){
+      var st = window.switchTab;
+      window.switchTab = function(id){ var r = st.apply(this, arguments); try { if (id === 'compare' && payVisible()) render(); } catch(e){ console.error('[Payments]', e); } return r; };
+    }
+    // keep the tab badge current after loads / saves (header stats already run after every change)
+    if (typeof window.updateHeaderStats === 'function'){
+      var uh = window.updateHeaderStats;
+      window.updateHeaderStats = function(){ var r = uh.apply(this, arguments); try { updateTabCount(); } catch(e){} return r; };
+    }
+    updateTabCount();
+  }
+
+  window.jslPay = {
+    switchPane: switchPane, render: render, sort: sortBy, exportCSV: exportCSV, exportPDF: exportPDF,
+    markPaid: markPaid, markUnpaid: markUnpaid, markNotPaid: markNotPaid, clearOverride: clearOverride, markChecked: markChecked, openFile: openFile,
+    handleFiles: handleFiles,
+    _undo: undoJob, _pick: pickRecord, _dismiss: dismissJob, _view: viewJobFile,
+    // exposed for testing / Yaki
+    _status: payStatus, _records: allRecords, _parseText: parseText, _collectRefs: collectRefs, _findMatches: findMatches, RULE_CUTOFF: RULE_CUTOFF
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
+</script>
 </body>
 </html>
 

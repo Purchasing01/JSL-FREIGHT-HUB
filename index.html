@@ -2977,18 +2977,35 @@ html.fx-exporting .workspace, html.fx-exporting .panel, html.fx-exporting .panel
   <div id="cmp-pay-pane" style="display:none;">
     <div class="card pay-drop-card">
       <div class="card-hd">
-        <span class="card-title">Upload Carrier Invoice</span>
-        <span class="pay-hint">PDF or screenshot · drag &amp; drop, browse, or paste with Ctrl+V</span>
+        <span class="card-title">Carrier Invoice</span>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="pay-hint">Copy the invoice, then paste — like a quote</span>
+          <button class="btn btn-ai btn-sm" onclick="jslPay.paste()" title="Paste a copied invoice — AI finds the shipment and marks it paid">
+            <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>
+            Paste &amp; Match
+          </button>
+        </div>
       </div>
       <div class="card-body">
-        <label class="pay-drop" id="pay-drop">
-          <input type="file" id="pay-file" accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/*" multiple style="display:none;">
-          <svg class="pay-drop-ico" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg>
-          <span class="pay-drop-title">Drop a carrier invoice here</span>
-          <span class="pay-drop-sub">The PO or TRF number and the carrier are read automatically, the shipment is found and marked as paid. Any difference against the approved amount is flagged.</span>
-          <span class="btn btn-primary btn-sm pay-drop-btn">Browse files</span>
-        </label>
+        <div class="pay-drop" id="pay-drop" tabindex="0" role="button" onclick="jslPay.paste()" title="Click, then paste the invoice">
+          <input type="file" id="pay-file" accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/*" multiple style="display:none;" onclick="event.stopPropagation()">
+          <svg class="pay-drop-ico" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>
+          <span class="pay-drop-title">Copy the invoice and paste it here — <kbd>Ctrl</kbd>+<kbd>V</kbd></span>
+          <span class="pay-drop-sub">A screenshot, a copied image, or a PDF copied from your email or folder. AI reads the PO or TRF number and the carrier, finds the shipment and marks it as paid. Any difference against the approved amount is flagged. You can also drag the file in.</span>
+          <span class="pay-drop-actions">
+            <span class="btn btn-ai btn-sm">Paste &amp; Match</span>
+            <span class="btn btn-ghost btn-sm" onclick="event.stopPropagation();document.getElementById('pay-file').click();">Browse files</span>
+          </span>
+        </div>
         <div id="pay-results"></div>
+        <div class="ai-paste-zone" id="pay-paste-zone" onclick="if(event.target===this)jslPay.closePaste()">
+          <div class="ai-paste-zone-inner" style="border-color:#fdba74;">
+            <div class="ai-paste-zone-icon">📋</div>
+            <div class="ai-paste-zone-title">Paste the carrier invoice</div>
+            <div class="ai-paste-zone-sub">Press <strong>Ctrl+V</strong> (<strong>⌘V</strong> on Mac) to paste a screenshot, a copied image, or a copied PDF file.<br>AI will find the shipment, show the AP details and mark it as paid.</div>
+            <button class="ai-paste-zone-cancel" onclick="jslPay.closePaste()">Cancel — close this</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -13952,7 +13969,9 @@ html body #panel-compare .inner-tab.active{ color:#fff !important; background:li
 #cmp-pay-pane .pay-drop-ico{ width:34px; height:34px; fill:none; stroke:#ea580c; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
 #cmp-pay-pane .pay-drop-title{ font-size:14px; font-weight:700; color:#1e293b; }
 #cmp-pay-pane .pay-drop-sub{ font-size:12px; color:#64748b; max-width:560px; line-height:1.5; }
-#cmp-pay-pane .pay-drop-btn{ margin-top:6px; pointer-events:none; }
+#cmp-pay-pane .pay-drop-actions{ display:flex; gap:8px; margin-top:8px; }
+#cmp-pay-pane .pay-drop:focus{ outline:none; border-color:#ea580c; box-shadow:0 0 0 3px rgba(234,88,12,.15); }
+#cmp-pay-pane .pay-drop kbd{ font-family:inherit; font-size:11.5px; font-weight:700; padding:1px 6px; border-radius:5px; border:1px solid #fdba74; background:#fff; color:#9a3412; }
 
 #cmp-pay-pane .pay-drop-card, #pay-metrics{ margin-bottom:16px; }
 #pay-results{ display:flex; flex-direction:column; gap:12px; }
@@ -14702,6 +14721,43 @@ html body #panel-compare .inner-tab.active{ color:#fff !important; background:li
   /* ════════════════════════════════════════════════════════════════════
      WIRING
      ════════════════════════════════════════════════════════════════════ */
+  /* ── paste: one click reads the clipboard (images); otherwise Ctrl+V on the paste zone ── */
+  function pasteZone(){ return $('pay-paste-zone'); }
+  function pasteOpen(){ var z = pasteZone(); return !!(z && z.classList.contains('active')); }
+  function openPaste(){ var z = pasteZone(); if (z) z.classList.add('active'); }
+  function closePaste(){ var z = pasteZone(); if (z) z.classList.remove('active'); }
+  function extOf(type){ return /pdf/.test(type) ? 'pdf' : /jpe?g/.test(type) ? 'jpg' : /webp/.test(type) ? 'webp' : 'png'; }
+  async function pasteClick(){
+    if (navigator.clipboard && typeof navigator.clipboard.read === 'function'){
+      try {
+        var items = await navigator.clipboard.read(), files = [];
+        for (var i = 0; i < items.length; i++){
+          var t = items[i].types.filter(function(x){ return /^image\//.test(x) || x === 'application/pdf'; })[0];
+          if (!t) continue;
+          var blob = await items[i].getType(t);
+          files.push(new File([blob], 'pasted-invoice-' + today() + '.' + extOf(t), { type:t }));
+        }
+        if (files.length){ handleFiles(files); return; }
+      } catch(e){ /* no permission or nothing readable → fall back to Ctrl+V */ }
+    }
+    openPaste();
+  }
+  function clipboardFiles(cd){
+    var out = [], seen = {};
+    function add(f){ if (!f) return; var k = (f.name || '') + '|' + f.size + '|' + f.type; if (seen[k]) return; seen[k] = 1; out.push(f); }
+    if (!cd) return out;
+    Array.prototype.forEach.call(cd.files || [], add);
+    Array.prototype.forEach.call(cd.items || [], function(it){ if (it.kind === 'file') add(it.getAsFile()); });
+    if (!out.length){
+      // an image copied from a web page / webmail can arrive only as HTML with an inline image
+      var html = cd.getData && cd.getData('text/html');
+      var m = html && html.match(/<img[^>]+src=["'](data:(image\/[a-z+]+);base64,([^"']+))["']/i);
+      if (m){ try { var bin = atob(m[3]), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+        add(new File([u], 'pasted-invoice-' + today() + '.' + extOf(m[2]), { type:m[2] })); } catch(e){} }
+    }
+    return out;
+  }
+
   function payVisible(){
     var panel = $('panel-compare'), pane = $('cmp-pay-pane');
     return !!(panel && pane && panel.classList.contains('active') && pane.style.display !== 'none');
@@ -14719,6 +14775,7 @@ html body #panel-compare .inner-tab.active{ color:#fff !important; background:li
   function init(){
     var drop = $('pay-drop'), input = $('pay-file');
     if (!drop || !input) return;
+    var pz = pasteZone(); if (pz && pz.parentNode !== document.body) document.body.appendChild(pz);   // fixed overlay must not sit inside a transformed card
     input.addEventListener('change', function(){ handleFiles(input.files); input.value = ''; });
     ['dragenter', 'dragover'].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.add('drag'); }); });
     ['dragleave', 'drop'].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.remove('drag'); }); });
@@ -14729,14 +14786,19 @@ html body #panel-compare .inner-tab.active{ color:#fff !important; background:li
       pane.addEventListener('drop', function(e){ if (e.target.closest && e.target.closest('#pay-drop')) return; e.preventDefault(); if (e.dataTransfer) handleFiles(e.dataTransfer.files); });
     }
     document.addEventListener('paste', function(e){
-      if (!payVisible()) return;
-      var z = $('ai-paste-zone'); if (z && z.classList.contains('active')) return;
-      var tg = e.target && e.target.tagName; if (tg === 'INPUT' || tg === 'TEXTAREA' || (e.target && e.target.isContentEditable)) return;
-      var items = (e.clipboardData && e.clipboardData.items) || [], files = [];
-      for (var i = 0; i < items.length; i++){ if (items[i].kind === 'file'){ var f = items[i].getAsFile(); if (f) files.push(f); } }
-      if (!files.length) return;
-      e.preventDefault(); handleFiles(files);
+      var zone = pasteOpen();
+      if (!zone && !payVisible()) return;
+      var z = $('ai-paste-zone'); if (z && z.classList.contains('active')) return;     // quote auto-fill owns this paste
+      if (!zone){ var tg = e.target && e.target.tagName; if (tg === 'INPUT' || tg === 'TEXTAREA' || tg === 'SELECT' || (e.target && e.target.isContentEditable)) return; }
+      var files = clipboardFiles(e.clipboardData);
+      if (!files.length){
+        if (zone) toast('Nothing to paste — copy the invoice image or PDF first. If a copied email attachment does not paste, drag it in instead.', 'warn');
+        return;
+      }
+      e.preventDefault(); closePaste(); handleFiles(files);
     });
+    document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && pasteOpen()) closePaste(); });
+    drop.addEventListener('keydown', function(e){ if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); pasteClick(); } });
     // refresh when returning to Compare with Payments open
     if (typeof window.switchTab === 'function'){
       var st = window.switchTab;
@@ -14753,12 +14815,217 @@ html body #panel-compare .inner-tab.active{ color:#fff !important; background:li
   window.jslPay = {
     switchPane: switchPane, render: render, sort: sortBy, exportCSV: exportCSV, exportPDF: exportPDF,
     markPaid: markPaid, markUnpaid: markUnpaid, markNotPaid: markNotPaid, clearOverride: clearOverride, markChecked: markChecked, openFile: openFile,
-    handleFiles: handleFiles,
+    handleFiles: handleFiles, paste: pasteClick, closePaste: closePaste,
     _undo: undoJob, _pick: pickRecord, _dismiss: dismissJob, _view: viewJobFile,
     // exposed for testing / Yaki
     _status: payStatus, _records: allRecords, _parseText: parseText, _collectRefs: collectRefs, _findMatches: findMatches, RULE_CUTOFF: RULE_CUTOFF
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
+</script>
+<style id="jsl-dd-css">
+/* ══ DROPDOWNS ALWAYS OPEN DOWNWARD ══
+   Native <select> popups are placed by the browser and flip upward when the
+   list is long. Every single-choice select in the Hub now opens this panel
+   directly BELOW the field instead. The <select> itself stays the source of
+   truth (value, onchange, options rebuilt by the app) — only the popup list
+   is replaced. Phones/tablets keep their native pickers. */
+.jsl-dd{ position:fixed; z-index:100000; background:#fff; border:1px solid rgba(15,23,42,.10); border-radius:12px;
+  box-shadow:0 18px 48px -12px rgba(15,23,42,.28), 0 2px 6px rgba(15,23,42,.06); display:flex; flex-direction:column; overflow:hidden;
+  font-family:inherit; font-size:13px; color:#1e293b; transform-origin:top center; animation:jslDdIn .14s ease-out; }
+@keyframes jslDdIn{ from{ opacity:0; transform:translateY(-4px) scaleY(.98); } to{ opacity:1; transform:none; } }
+.jsl-dd-search{ margin:8px 8px 4px; padding:7px 10px 7px 30px; border:1.5px solid #e2e8f0; border-radius:8px; font:inherit; font-size:12.5px; outline:none;
+  background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-3.5-3.5'/%3E%3C/svg%3E") no-repeat 10px center; }
+.jsl-dd-search:focus{ border-color:#94a3b8; }
+.jsl-dd-list{ overflow-y:auto; padding:4px; overscroll-behavior:contain; }
+.jsl-dd-item{ padding:8px 30px 8px 11px; border-radius:8px; cursor:pointer; line-height:1.35; position:relative; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.jsl-dd-item.active{ background:#f1f5f9; }
+.jsl-dd-item.sel{ font-weight:700; color:#9b1c1c; }
+.jsl-dd-item.sel::after{ content:''; position:absolute; right:11px; top:50%; width:10px; height:5px; margin-top:-4px; border-left:2px solid currentColor; border-bottom:2px solid currentColor; transform:rotate(-45deg); }
+.jsl-dd-item.dis{ color:#cbd5e1; cursor:default; }
+.jsl-dd-group{ padding:8px 11px 4px; font-size:10px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:#94a3b8; }
+.jsl-dd-empty{ padding:12px; color:#94a3b8; text-align:center; font-size:12px; }
+body.compare-active .jsl-dd-item.sel{ color:#c2410c; }
+body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
+@media (prefers-reduced-motion:reduce){ .jsl-dd{ animation:none; } }
+</style>
+<script id="jsl-dd-js">
+(function(){
+  'use strict';
+  if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return;   // touch devices: native pickers
+  var dd = null;   // { sel, panel, list, search, items:[{opt, el}], active }
+
+  function eligible(sel){ return !!(sel && sel.tagName === 'SELECT' && !sel.multiple && !(sel.size > 1) && !sel.disabled && !sel.hasAttribute('data-native')); }
+  function scrollParent(el){
+    for (var p = el.parentElement; p && p !== document.body; p = p.parentElement){
+      var oy = getComputedStyle(p).overflowY;
+      if ((oy === 'auto' || oy === 'scroll' || oy === 'overlay') && p.scrollHeight > p.clientHeight + 2) return p;
+    }
+    return null;
+  }
+  // Make sure there is room under the field: scroll the page (or the modal) up if needed.
+  function makeRoom(sel, want){
+    var r = sel.getBoundingClientRect(), below = window.innerHeight - r.bottom - 12;
+    if (below >= want) return;
+    var need = want - below, sp = scrollParent(sel);
+    if (sp){
+      var spr = sp.getBoundingClientRect(), roomInSp = spr.bottom - r.bottom - 12;
+      if (roomInSp < want){ var before = sp.scrollTop; sp.scrollTo({ top: before + Math.min(need, want - roomInSp), behavior:'instant' }); need -= (sp.scrollTop - before); }
+    }
+    if (need > 0) window.scrollBy({ top: need, behavior:'instant' });   // html has scroll-behavior:smooth — jump so the panel is placed on the final position
+  }
+  function place(){
+    if (!dd) return;
+    var r = dd.sel.getBoundingClientRect();
+    if (r.bottom < 0 || r.top > window.innerHeight){ close(); return; }
+    var w = Math.min(Math.max(r.width, 220), window.innerWidth - 16);   // same width as the field
+    var left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
+    var top = r.bottom + 4;
+    dd.panel.style.left = left + 'px';
+    dd.panel.style.top = top + 'px';
+    dd.panel.style.width = w + 'px';
+    dd.panel.style.maxHeight = Math.max(90, window.innerHeight - top - 10) + 'px';
+  }
+  function visibleItems(){ return dd.items.filter(function(it){ return it.el.style.display !== 'none' && !it.opt.disabled; }); }
+  function setActive(it, scroll){
+    dd.items.forEach(function(x){ x.el.classList.remove('active'); });
+    dd.active = it || null;
+    if (it){ it.el.classList.add('active'); if (scroll) it.el.scrollIntoView({ block:'nearest' }); }
+  }
+  function filter(q){
+    q = String(q || '').trim().toLowerCase();
+    dd.items.forEach(function(it){ it.el.style.display = (!q || it.text.toLowerCase().indexOf(q) >= 0) ? '' : 'none'; });
+    Array.prototype.forEach.call(dd.list.querySelectorAll('.jsl-dd-group'), function(g){
+      var any = dd.items.some(function(it){ return it.group === g && it.el.style.display !== 'none'; });
+      g.style.display = any ? '' : 'none';
+    });
+    var v = visibleItems(), empty = dd.list.querySelector('.jsl-dd-empty');
+    if (!v.length && !empty){ empty = document.createElement('div'); empty.className = 'jsl-dd-empty'; empty.textContent = 'No matches'; dd.list.appendChild(empty); }
+    if (v.length && empty) empty.remove();
+    setActive(v[0], true);
+  }
+  function choose(it){
+    if (!dd || !it || it.opt.disabled) return;
+    var sel = dd.sel, changed = sel.selectedIndex !== it.opt.index;
+    sel.selectedIndex = it.opt.index;
+    close();
+    try { sel.focus({ preventScroll:true }); } catch(e){}
+    if (changed){
+      sel.dispatchEvent(new Event('input', { bubbles:true }));
+      sel.dispatchEvent(new Event('change', { bubbles:true }));
+    }
+  }
+  function open(sel){
+    close();
+    var panel = document.createElement('div'); panel.className = 'jsl-dd'; panel.setAttribute('role', 'listbox');
+    var opts = Array.prototype.filter.call(sel.options, function(o){ return !o.hidden && o.style.display !== 'none'; });
+    var search = null;
+    if (opts.length > 10){
+      search = document.createElement('input'); search.type = 'text'; search.className = 'jsl-dd-search'; search.placeholder = 'Type to search…';
+      search.setAttribute('autocomplete', 'off'); panel.appendChild(search);
+    }
+    var list = document.createElement('div'); list.className = 'jsl-dd-list'; panel.appendChild(list);
+    var items = [];
+    function addOpt(o, group){
+      if (o.hidden || o.style.display === 'none') return;
+      var el = document.createElement('div');
+      el.className = 'jsl-dd-item' + (o.disabled ? ' dis' : '') + (o.index === sel.selectedIndex ? ' sel' : '');
+      el.textContent = o.textContent || ' '; el.title = o.textContent; el.setAttribute('role', 'option');
+      var it = { opt:o, el:el, text:o.textContent || '', group:group || null };
+      el.addEventListener('mousedown', function(e){ e.preventDefault(); });
+      el.addEventListener('click', function(){ choose(it); });
+      el.addEventListener('mousemove', function(){ if (dd && dd.active !== it && !o.disabled) setActive(it, false); });
+      list.appendChild(el); items.push(it);
+    }
+    Array.prototype.forEach.call(sel.children, function(ch){
+      if (ch.tagName === 'OPTGROUP'){
+        var g = document.createElement('div'); g.className = 'jsl-dd-group'; g.textContent = ch.label || ''; list.appendChild(g);
+        Array.prototype.forEach.call(ch.children, function(o){ if (o.tagName === 'OPTION') addOpt(o, g); });
+      } else if (ch.tagName === 'OPTION') addOpt(ch, null);
+    });
+    dd = { sel:sel, panel:panel, list:list, search:search, items:items, active:null };
+    var natural = Math.min(360, items.length * 34 + (search ? 44 : 0) + 10);
+    makeRoom(sel, Math.min(natural, 300) + 16);
+    document.body.appendChild(panel);
+    place();
+    var cur = items.filter(function(it){ return it.opt.index === sel.selectedIndex; })[0] || visibleItems()[0];
+    setActive(cur, false);
+    if (cur) list.scrollTop = Math.max(0, cur.el.offsetTop - list.clientHeight / 2 + cur.el.offsetHeight / 2);
+    if (search){
+      search.addEventListener('input', function(){ filter(search.value); });
+      setTimeout(function(){ try { search.focus({ preventScroll:true }); } catch(e){} }, 0);
+    }
+    sel.setAttribute('aria-expanded', 'true');
+  }
+  function close(){
+    if (!dd) return;
+    dd.sel.removeAttribute('aria-expanded');
+    if (dd.panel.parentNode) dd.panel.parentNode.removeChild(dd.panel);
+    dd = null;
+  }
+  function move(step){
+    var v = visibleItems(); if (!v.length) return;
+    var i = v.indexOf(dd.active);
+    i = i < 0 ? (step > 0 ? 0 : v.length - 1) : Math.max(0, Math.min(v.length - 1, i + step));
+    setActive(v[i], true);
+  }
+
+  document.addEventListener('mousedown', function(e){
+    var t = e.target, sel = t && t.closest ? t.closest('select') : null;
+    if (dd && dd.panel.contains(t)) return;
+    if (!eligible(sel)){ close(); return; }
+    if (e.button !== 0) return;
+    e.preventDefault();                       // stops the native (upward-flipping) popup
+    if (dd && dd.sel === sel){ close(); return; }
+    try { sel.focus({ preventScroll:true }); } catch(err){}
+    open(sel);
+  }, true);
+
+  document.addEventListener('keydown', function(e){
+    if (dd){
+      var k = e.key;
+      if (k === 'ArrowDown'){ e.preventDefault(); move(1); }
+      else if (k === 'ArrowUp'){ e.preventDefault(); move(-1); }
+      else if (k === 'PageDown'){ e.preventDefault(); move(8); }
+      else if (k === 'PageUp'){ e.preventDefault(); move(-8); }
+      else if (k === 'Enter'){ e.preventDefault(); choose(dd.active); }
+      else if (k === 'Escape'){ e.preventDefault(); e.stopPropagation(); var s = dd.sel; close(); try { s.focus({ preventScroll:true }); } catch(err){} }
+      else if (k === 'Tab'){ close(); }
+      else if (!dd.search && k.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey){
+        // type-ahead for short lists
+        var v = visibleItems(), ch = k.toLowerCase(), i = v.indexOf(dd.active);
+        var nx = v.slice(i + 1).concat(v.slice(0, i + 1)).filter(function(it){ return it.text.trim().toLowerCase().indexOf(ch) === 0; })[0];
+        if (nx) setActive(nx, true);
+      }
+      return;
+    }
+    var sel = e.target;
+    if (!eligible(sel)) return;
+    if (((e.key === 'ArrowDown' || e.key === 'ArrowUp') && e.altKey) || e.key === ' ' || e.key === 'Enter' || e.key === 'F4'){
+      e.preventDefault(); open(sel);
+    }
+  }, true);
+
+  window.addEventListener('resize', close);
+  document.addEventListener('scroll', function(e){ if (dd && !dd.panel.contains(e.target)) place(); }, true);
+
+  // Custom date pickers already open downward — make sure the calendar is never cut off by the bottom of the window.
+  if (typeof window.dpToggle === 'function'){
+    var _dpt = window.dpToggle;
+    window.dpToggle = function(id){
+      var r0 = _dpt.apply(this, arguments);
+      try {
+        var el = document.getElementById(id + '-cal');
+        if (el && el.classList.contains('open')) requestAnimationFrame(function(){
+          var r = el.getBoundingClientRect(), over = r.top + el.offsetHeight - (window.innerHeight - 10);   // offsetHeight: the open animation scales the box
+          if (over > 0){ var sp = scrollParent(el); if (sp) sp.scrollTo({ top: sp.scrollTop + over, behavior:'smooth' }); else window.scrollBy({ top: over, behavior:'smooth' }); }
+        });
+      } catch(e){}
+      return r0;
+    };
+  }
+
+  window.jslDropdown = { open:open, close:close };
 })();
 </script>
 </body>

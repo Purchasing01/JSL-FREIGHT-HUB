@@ -13961,7 +13961,11 @@ html body #panel-compare .inner-tab.active{ color:#fff !important; background:li
 #panel-compare .pay-tab-count:empty{ display:none; }
 
 /* Payments uses the full window width (the app column is capped at 1280px) so every column fits at a glance */
-#cmp-pay-pane{ --pay-w:min(calc(100vw - 48px), 1760px); width:var(--pay-w); max-width:none; margin-left:calc((100% - var(--pay-w)) / 2); }
+#panel-compare{ --pay-w:min(calc(100vw - 48px), 1760px); }
+#cmp-pay-pane{ width:var(--pay-w); max-width:none; margin-left:calc((100% - var(--pay-w)) / 2); }
+/* in Payments the page title, tabs and Export button line up with the wide white cards */
+#panel-compare.pay-wide > .section-hd{ width:var(--pay-w); max-width:none; margin-left:calc((100% - var(--pay-w)) / 2); box-sizing:border-box; }
+#panel-compare.pay-wide > .cmp-inner-tabs{ margin-left:calc((100% - var(--pay-w)) / 2); }
 #cmp-pay-pane .table-scroll-wrap{ overflow-x:auto; }
 #pay-table{ width:100%; }
 #pay-table th, #pay-table td{ white-space:nowrap; }
@@ -14777,6 +14781,7 @@ html body #panel-compare .inner-tab.active{ color:#fff !important; background:li
     var rates = $('cmp-rates-pane'), pay = $('cmp-pay-pane');
     if (!rates || !pay) return;
     rates.style.display = id === 'payments' ? 'none' : '';
+    var panel = $('panel-compare'); if (panel) panel.classList.toggle('pay-wide', id === 'payments');
     pay.style.display = id === 'payments' ? '' : 'none';
     ['ctab-rates', 'ctab-payments'].forEach(function(t){ var x = $(t); if (x) x.classList.remove('active'); });
     (el || $(id === 'payments' ? 'ctab-payments' : 'ctab-rates')).classList.add('active');

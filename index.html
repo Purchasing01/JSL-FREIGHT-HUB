@@ -2364,8 +2364,153 @@ html.fx-exporting .workspace, html.fx-exporting .panel, html.fx-exporting .panel
 
 </style>
 
+<style id="jsl-auth-css">
+/* ═══ JSL AUTH GATE — login screen, user chip, hidden access panel ═══ */
+html.jsl-locked, html.jsl-locked body{ overflow:hidden !important; }
+#jsl-gate{ position:fixed; inset:0; z-index:100500; display:grid; place-items:center; padding:24px 16px;
+  background:
+    radial-gradient(1200px 600px at 12% -10%, rgba(220,38,38,.10), transparent 60%),
+    radial-gradient(900px 520px at 110% 110%, rgba(155,28,28,.12), transparent 60%),
+    linear-gradient(180deg,#fff7f6 0%,#fdf2f2 100%);
+  font-family:'Inter','Aptos','Segoe UI',system-ui,sans-serif; color:#2a0b0a;
+  transition:opacity .45s cubic-bezier(.16,1,.3,1), visibility .45s; }
+#jsl-gate.jsl-gone{ opacity:0; visibility:hidden; pointer-events:none; }
+#jsl-gate::before{ content:''; position:absolute; inset:0; pointer-events:none; opacity:.5;
+  background-image:linear-gradient(rgba(155,28,28,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(155,28,28,.05) 1px,transparent 1px);
+  background-size:44px 44px; mask-image:radial-gradient(ellipse at center,#000 30%,transparent 75%);
+  -webkit-mask-image:radial-gradient(ellipse at center,#000 30%,transparent 75%); }
+.jsl-gate-card{ position:relative; width:100%; max-width:420px; background:#fff; border-radius:22px;
+  border:1px solid rgba(69,10,10,.08); padding:34px 32px 26px;
+  box-shadow:0 2px 4px rgba(69,10,10,.05),0 18px 36px -10px rgba(69,10,10,.18),0 48px 90px -36px rgba(69,10,10,.32);
+  animation:jsl-gate-in .7s cubic-bezier(.16,1,.3,1) both; }
+@keyframes jsl-gate-in{ from{ opacity:0; transform:translate3d(0,18px,0) scale(.97); } }
+.jsl-gate-card::before{ content:''; position:absolute; left:28px; right:28px; top:0; height:3px; border-radius:0 0 3px 3px;
+  background:linear-gradient(90deg,#9b1c1c,#dc2626,#fcd34d); }
+.jsl-gate-logo{ display:flex; justify-content:center; margin-bottom:14px; }
+.jsl-gate-logo img{ height:46px; width:auto; }
+.jsl-gate-title{ text-align:center; font-family:'Plus Jakarta Sans','Inter',sans-serif; font-weight:800; font-size:22px; letter-spacing:-.03em; }
+.jsl-gate-sub{ text-align:center; margin-top:6px; font-size:13px; color:#8c7773; line-height:1.5; }
+.jsl-gate-sub b{ color:#450a0a; font-weight:600; }
+.jsl-gate-form{ margin-top:22px; display:flex; flex-direction:column; gap:12px; }
+.jsl-gate-label{ font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:#9b7a75; }
+.jsl-gate-input{ width:100%; height:46px; border-radius:12px; border:1px solid #ead7d3; background:#fffafa;
+  padding:0 14px; font-size:15px; color:#2a0b0a; outline:none; transition:border-color .2s, box-shadow .2s, background .2s; }
+.jsl-gate-input:focus{ border-color:#dc2626; background:#fff; box-shadow:0 0 0 4px rgba(220,38,38,.12); }
+.jsl-gate-input.jsl-code{ text-align:center; font-size:24px; font-weight:700; letter-spacing:.42em; font-variant-numeric:tabular-nums; }
+.jsl-gate-btn{ height:46px; border:0; border-radius:12px; cursor:pointer; color:#fff; font-weight:700; font-size:14px; letter-spacing:.01em;
+  background:linear-gradient(135deg,#9b1c1c,#dc2626); box-shadow:0 8px 20px -8px rgba(155,28,28,.6);
+  transition:transform .15s, box-shadow .2s, opacity .2s; display:flex; align-items:center; justify-content:center; gap:8px; }
+.jsl-gate-btn:hover{ transform:translateY(-1px); box-shadow:0 12px 26px -8px rgba(155,28,28,.7); }
+.jsl-gate-btn:disabled{ opacity:.55; cursor:default; transform:none; }
+.jsl-gate-spin{ width:16px; height:16px; border-radius:50%; border:2px solid rgba(255,255,255,.4); border-top-color:#fff; animation:jsl-spin .7s linear infinite; }
+@keyframes jsl-spin{ to{ transform:rotate(360deg); } }
+.jsl-gate-links{ display:flex; justify-content:space-between; font-size:12.5px; margin-top:2px; }
+.jsl-gate-link{ background:none; border:0; padding:0; color:#9b1c1c; font-weight:600; cursor:pointer; }
+.jsl-gate-link:disabled{ color:#b9a7a3; cursor:default; }
+.jsl-gate-msg{ display:none; border-radius:10px; padding:10px 12px; font-size:12.5px; line-height:1.45; }
+.jsl-gate-msg.err{ display:block; background:#fef2f2; border:1px solid #fecaca; color:#991b1b; }
+.jsl-gate-msg.ok{ display:block; background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; }
+.jsl-gate-foot{ margin-top:22px; padding-top:16px; border-top:1px solid rgba(69,10,10,.07); display:flex; align-items:center; justify-content:center;
+  gap:7px; font-size:11.5px; color:#9b7a75; text-align:center; }
+.jsl-gate-foot svg{ flex:none; }
+.jsl-gate-step{ display:none; } .jsl-gate-step.on{ display:block; }
+
+/* signed-in chip (bottom-left) */
+#jsl-user-chip{ position:fixed; left:16px; bottom:16px; z-index:9000; display:none; align-items:center; gap:8px;
+  background:rgba(255,255,255,.92); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+  border:1px solid rgba(69,10,10,.09); border-radius:999px; padding:5px 6px 5px 5px;
+  box-shadow:0 1px 2px rgba(69,10,10,.04),0 8px 18px -6px rgba(69,10,10,.14); font-family:'Inter',system-ui,sans-serif; user-select:none; }
+#jsl-user-chip.on{ display:flex; }
+.jsl-chip-av{ width:28px; height:28px; border-radius:50%; display:grid; place-items:center; color:#fff; font-weight:800; font-size:12px;
+  background:linear-gradient(135deg,#9b1c1c,#dc2626); cursor:default; }
+.jsl-chip-mail{ font-size:12px; font-weight:600; color:#450a0a; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.jsl-chip-out{ border:0; background:#fdf2f2; color:#9b1c1c; font-weight:700; font-size:11.5px; border-radius:999px; padding:6px 10px; cursor:pointer; }
+.jsl-chip-out:hover{ background:#fee2e2; }
+@media (max-width:640px){ .jsl-chip-mail{ display:none; } }
+
+/* hidden access panel */
+#jsl-access{ position:fixed; inset:0; z-index:100400; display:none; place-items:center; padding:24px 16px;
+  background:rgba(42,11,10,.42); backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); font-family:'Inter',system-ui,sans-serif; }
+#jsl-access.on{ display:grid; }
+.jsl-acc-card{ width:100%; max-width:1080px; max-height:calc(100vh - 48px); display:flex; flex-direction:column; background:#fff; border-radius:20px; overflow:hidden;
+  box-shadow:0 8px 20px rgba(69,10,10,.10),0 28px 70px rgba(69,10,10,.24); animation:jsl-gate-in .45s cubic-bezier(.16,1,.3,1) both; }
+.jsl-acc-head{ padding:20px 24px 16px; color:#fff; background:linear-gradient(120deg,#450a0a,#9b1c1c 55%,#dc2626); display:flex; align-items:flex-start; gap:16px; }
+.jsl-acc-head h2{ font-family:'Plus Jakarta Sans','Inter',sans-serif; font-size:19px; font-weight:800; letter-spacing:-.02em; }
+.jsl-acc-head p{ font-size:12.5px; opacity:.82; margin-top:3px; }
+.jsl-acc-x{ margin-left:auto; border:0; background:rgba(255,255,255,.14); color:#fff; width:32px; height:32px; border-radius:10px; cursor:pointer; font-size:18px; line-height:1; }
+.jsl-acc-x:hover{ background:rgba(255,255,255,.24); }
+.jsl-acc-stats{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; padding:16px 24px; border-bottom:1px solid #f1e4e1; background:#fffafa; }
+.jsl-acc-stat{ background:#fff; border:1px solid #f1e4e1; border-radius:14px; padding:12px 14px; }
+.jsl-acc-stat .k{ font-size:10.5px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:#9b7a75; }
+.jsl-acc-stat .v{ margin-top:4px; font-family:'Plus Jakarta Sans','Inter',sans-serif; font-size:22px; font-weight:800; color:#450a0a; font-variant-numeric:tabular-nums; }
+.jsl-acc-bar{ display:flex; align-items:center; gap:10px; padding:12px 24px; border-bottom:1px solid #f1e4e1; flex-wrap:wrap; }
+.jsl-acc-tab{ border:1px solid #ead7d3; background:#fff; color:#7f1d1d; font-weight:700; font-size:12.5px; border-radius:999px; padding:7px 14px; cursor:pointer; }
+.jsl-acc-tab.on{ background:#9b1c1c; border-color:#9b1c1c; color:#fff; }
+.jsl-acc-search{ margin-left:auto; height:34px; min-width:220px; border:1px solid #ead7d3; border-radius:10px; padding:0 12px; font-size:13px; outline:none; }
+.jsl-acc-search:focus{ border-color:#dc2626; box-shadow:0 0 0 3px rgba(220,38,38,.1); }
+.jsl-acc-btn{ border:1px solid #ead7d3; background:#fff; color:#450a0a; font-weight:600; font-size:12.5px; border-radius:10px; height:34px; padding:0 12px; cursor:pointer; }
+.jsl-acc-btn:hover{ background:#fdf2f2; }
+.jsl-acc-body{ overflow:auto; flex:1; min-height:200px; }
+.jsl-acc-table{ width:100%; border-collapse:collapse; font-size:12.5px; }
+.jsl-acc-table th{ position:sticky; top:0; background:#2a0b0a; color:#fff; text-align:left; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; padding:10px 14px; font-weight:700; white-space:nowrap; }
+.jsl-acc-table td{ padding:10px 14px; border-bottom:1px solid #f6ecea; color:#334155; white-space:nowrap; }
+.jsl-acc-table tr:hover td{ background:#fffafa; }
+.jsl-acc-table td.mail{ font-weight:600; color:#450a0a; }
+.jsl-acc-table td.num{ text-align:right; font-variant-numeric:tabular-nums; }
+.jsl-acc-pill{ display:inline-block; font-size:10.5px; font-weight:700; border-radius:999px; padding:3px 8px; letter-spacing:.02em; }
+.jsl-acc-pill.sign_in{ background:#dcfce7; color:#166534; } .jsl-acc-pill.app_open{ background:#e0e7ff; color:#3730a3; } .jsl-acc-pill.sign_out{ background:#f3f4f6; color:#4b5563; }
+.jsl-acc-empty{ padding:40px; text-align:center; color:#9b7a75; font-size:13px; }
+@media (max-width:760px){ .jsl-acc-stats{ grid-template-columns:repeat(2,1fr); } .jsl-acc-search{ min-width:0; width:100%; margin-left:0; } }
+@media print{ #jsl-gate, #jsl-user-chip, #jsl-access{ display:none !important; } }
+</style>
 </head>
 <body>
+<!-- ═══ JSL AUTH GATE — shown until a @jslfoods.com user signs in ═══ -->
+<script>document.documentElement.classList.add('jsl-locked');</script>
+<div id="jsl-gate" data-html2canvas-ignore="true" role="dialog" aria-modal="true" aria-labelledby="jsl-gate-title">
+  <div class="jsl-gate-card">
+    <div class="jsl-gate-logo"><img id="jsl-gate-logo" alt="JSL Foods Inc."></div>
+    <div class="jsl-gate-title" id="jsl-gate-title">Freight Hub</div>
+
+    <div class="jsl-gate-step" data-step="email">
+      <div class="jsl-gate-sub">Sign in with your <b>@jslfoods.com</b> email.<br>We'll send you a one-time code.</div>
+      <form class="jsl-gate-form" id="jsl-form-email" novalidate>
+        <label class="jsl-gate-label" for="jsl-email">Work email</label>
+        <input class="jsl-gate-input" id="jsl-email" type="email" autocomplete="email" inputmode="email" placeholder="name@jslfoods.com" required>
+        <div class="jsl-gate-msg" id="jsl-msg-email" role="alert"></div>
+        <button class="jsl-gate-btn" id="jsl-btn-send" type="submit">Send sign-in code</button>
+      </form>
+    </div>
+
+    <div class="jsl-gate-step" data-step="code">
+      <div class="jsl-gate-sub">Enter the code sent to <b id="jsl-code-to"></b>.<br>You can also click the link in that email.</div>
+      <form class="jsl-gate-form" id="jsl-form-code" novalidate>
+        <label class="jsl-gate-label" for="jsl-code">Sign-in code</label>
+        <input class="jsl-gate-input jsl-code" id="jsl-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="••••••" required>
+        <div class="jsl-gate-msg" id="jsl-msg-code" role="alert"></div>
+        <button class="jsl-gate-btn" id="jsl-btn-verify" type="submit">Verify and enter</button>
+        <div class="jsl-gate-links">
+          <button type="button" class="jsl-gate-link" id="jsl-back">Use a different email</button>
+          <button type="button" class="jsl-gate-link" id="jsl-resend" disabled>Resend code</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="jsl-gate-step on" data-step="loading">
+      <div class="jsl-gate-sub" style="margin-top:18px">Checking your session…</div>
+    </div>
+
+    <div class="jsl-gate-step" data-step="error">
+      <div class="jsl-gate-msg err" style="margin-top:18px">The secure sign-in service could not load. Check your connection and refresh the page.</div>
+    </div>
+
+    <div class="jsl-gate-foot">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+      Restricted to JSL Foods accounts. Every access is logged.
+    </div>
+  </div>
+</div>
+
 
 <!-- MASTHEAD -->
 <header class="masthead">
@@ -4176,7 +4321,8 @@ async function _migratePackingSlipsToStorage() {
 // ═══════════════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════════════
-window.onload = async () => {
+// Runs only after a verified @jslfoods.com sign-in (see JSL AUTH GATE at the end of the page)
+window._jslBoot = async () => {
   // 1. Try loading from Supabase (shared cloud database)
   let loaded = await loadFromSupabase();
   // 2. If Supabase was empty or failed, try localStorage
@@ -10843,7 +10989,8 @@ function renderDashboard(){
 
   /* ── SUPABASE FETCH ── */
   async function fetchSupabase(){
-    const headers={'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY};
+    let _tok=SUPABASE_KEY; try{ if(typeof window._jslAccessToken==='function') _tok=(await window._jslAccessToken())||SUPABASE_KEY; }catch(e){}
+    const headers={'apikey':SUPABASE_KEY,'Authorization':'Bearer '+_tok};
     const results={shipmentsFlat:[],vendorsFlat:[],transfersFlat:[]};
     try{
       // Read from app_meta — that's where the app saves everything
@@ -15042,6 +15189,318 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
   }
 
   window.jslDropdown = { open:open, close:close };
+})();
+</script>
+<!-- signed-in user chip + hidden access panel (admin only) -->
+<div id="jsl-user-chip" data-html2canvas-ignore="true">
+  <div class="jsl-chip-av" id="jsl-chip-av" title="">?</div>
+  <span class="jsl-chip-mail" id="jsl-chip-mail"></span>
+  <button type="button" class="jsl-chip-out" id="jsl-chip-out">Sign out</button>
+</div>
+<div id="jsl-access" data-html2canvas-ignore="true" role="dialog" aria-modal="true" aria-labelledby="jsl-acc-title">
+  <div class="jsl-acc-card">
+    <div class="jsl-acc-head">
+      <div><h2 id="jsl-acc-title">Access Control</h2><p>Who has signed in to the Freight Hub, and when.</p></div>
+      <button type="button" class="jsl-acc-x" id="jsl-acc-close" aria-label="Close">×</button>
+    </div>
+    <div class="jsl-acc-stats">
+      <div class="jsl-acc-stat"><div class="k">Registered users</div><div class="v" id="jsl-st-users">–</div></div>
+      <div class="jsl-acc-stat"><div class="k">Active · 7 days</div><div class="v" id="jsl-st-7d">–</div></div>
+      <div class="jsl-acc-stat"><div class="k">Accesses today</div><div class="v" id="jsl-st-today">–</div></div>
+      <div class="jsl-acc-stat"><div class="k">Accesses · 30 days</div><div class="v" id="jsl-st-30d">–</div></div>
+    </div>
+    <div class="jsl-acc-bar">
+      <button type="button" class="jsl-acc-tab on" data-tab="users">Users</button>
+      <button type="button" class="jsl-acc-tab" data-tab="log">Activity log</button>
+      <input class="jsl-acc-search" id="jsl-acc-q" type="search" placeholder="Filter by email…">
+      <button type="button" class="jsl-acc-btn" id="jsl-acc-refresh">Refresh</button>
+      <button type="button" class="jsl-acc-btn" id="jsl-acc-csv">Export CSV</button>
+    </div>
+    <div class="jsl-acc-body" id="jsl-acc-body"><div class="jsl-acc-empty">Loading…</div></div>
+  </div>
+</div>
+
+<script id="jsl-auth-js">
+/* ═══════════════════════════════════════════════════════════════════
+   JSL AUTH GATE
+   • The app only boots (window._jslBoot) after a verified @jslfoods.com
+     session exists. Data access itself is enforced by Supabase RLS.
+   • Every app open is written to access_log through log_access().
+   • Hidden access panel: Ctrl+Alt+J, or triple-click your avatar.
+     Only opens for emails listed in app_admins (checked server-side).
+   ═══════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  var JSL_RE = /^[^@\s]+@jslfoods\.com$/i;
+  var CACHE_KEY = 'jsl_freight_data_v1';
+  var RESEND_SECS = 60;
+  var sb = (typeof _sb !== 'undefined') ? _sb : null;
+  var booted = false, unlocking = false, isAdmin = false, pendingEmail = '', resendTimer = null;
+  var accTab = 'users', accUsers = [], accLog = [];
+
+  function $(id){ return document.getElementById(id); }
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function isJsl(e){ return typeof e === 'string' && JSL_RE.test(e.trim()); }
+
+  // Supabase session token for code that calls the REST API directly (Yaki)
+  window._jslAccessToken = async function(){
+    if (!sb) return null;
+    try { var r = await sb.auth.getSession(); return r.data.session ? r.data.session.access_token : null; }
+    catch(e){ return null; }
+  };
+
+  /* ── gate UI ─────────────────────────────────────────── */
+  function step(name){
+    var all = document.querySelectorAll('#jsl-gate .jsl-gate-step');
+    for (var i = 0; i < all.length; i++) all[i].classList.toggle('on', all[i].getAttribute('data-step') === name);
+    if (name === 'email') setTimeout(function(){ $('jsl-email').focus(); }, 60);
+    if (name === 'code')  setTimeout(function(){ $('jsl-code').focus(); }, 60);
+  }
+  function msg(id, text, kind){ var el = $(id); el.className = 'jsl-gate-msg' + (text ? ' ' + (kind || 'err') : ''); el.textContent = text || ''; }
+  function busy(btn, on, label){
+    btn.disabled = on;
+    btn.innerHTML = on ? '<span class="jsl-gate-spin"></span>' : esc(label);
+  }
+  function friendly(err){
+    var m = (err && (err.message || err.error_description)) || String(err || '');
+    if (/database error|only @jslfoods\.com/i.test(m)) return 'Only @jslfoods.com accounts can access the Freight Hub.';
+    if (/rate limit|too many|security purposes/i.test(m)) return 'Too many attempts. Please wait a minute and try again.';
+    if (/expired|invalid|otp/i.test(m))                   return 'That code is invalid or has expired. Request a new one.';
+    if (/not authorized|unauthorized/i.test(m))           return 'Email delivery is not enabled for this address yet. Contact the Freight Hub admin.';
+    if (/fetch|network/i.test(m))                         return 'Connection problem. Check your internet and try again.';
+    return m || 'Something went wrong. Please try again.';
+  }
+  function startResendCountdown(){
+    var left = RESEND_SECS, btn = $('jsl-resend');
+    clearInterval(resendTimer);
+    btn.disabled = true; btn.textContent = 'Resend code (' + left + 's)';
+    resendTimer = setInterval(function(){
+      left--;
+      if (left <= 0){ clearInterval(resendTimer); btn.disabled = false; btn.textContent = 'Resend code'; }
+      else btn.textContent = 'Resend code (' + left + 's)';
+    }, 1000);
+  }
+
+  async function sendCode(email){
+    var r = await sb.auth.signInWithOtp({
+      email: email,
+      options: { shouldCreateUser: true, emailRedirectTo: location.origin + location.pathname }
+    });
+    if (r.error) throw r.error;
+  }
+
+  $('jsl-form-email').addEventListener('submit', async function(ev){
+    ev.preventDefault();
+    var email = $('jsl-email').value.trim().toLowerCase(), btn = $('jsl-btn-send');
+    msg('jsl-msg-email', '');
+    if (!isJsl(email)){ msg('jsl-msg-email', 'Use your @jslfoods.com work email.'); return; }
+    busy(btn, true);
+    try {
+      await sendCode(email);
+      pendingEmail = email;
+      $('jsl-code-to').textContent = email;
+      $('jsl-code').value = ''; msg('jsl-msg-code', '');
+      step('code'); startResendCountdown();
+    } catch(e){ msg('jsl-msg-email', friendly(e)); }
+    busy(btn, false, 'Send sign-in code');
+  });
+
+  $('jsl-form-code').addEventListener('submit', async function(ev){
+    ev.preventDefault();
+    var code = $('jsl-code').value.replace(/\D/g, ''), btn = $('jsl-btn-verify');
+    msg('jsl-msg-code', '');
+    if (code.length < 6){ msg('jsl-msg-code', 'Enter the full code from the email.'); return; }
+    busy(btn, true);
+    try {
+      var r = await sb.auth.verifyOtp({ email: pendingEmail, token: code, type: 'email' });
+      if (r.error) throw r.error;
+      if (r.data && r.data.session) await unlock(r.data.session, 'sign_in');
+    } catch(e){ msg('jsl-msg-code', friendly(e)); }
+    busy(btn, false, 'Verify and enter');
+  });
+
+  $('jsl-code').addEventListener('input', function(){
+    var v = this.value.replace(/\D/g, '');
+    if (v !== this.value) this.value = v;
+  });
+  $('jsl-back').addEventListener('click', function(){ clearInterval(resendTimer); step('email'); });
+  $('jsl-resend').addEventListener('click', async function(){
+    msg('jsl-msg-code', '');
+    try { await sendCode(pendingEmail); msg('jsl-msg-code', 'A new code is on its way.', 'ok'); startResendCountdown(); }
+    catch(e){ msg('jsl-msg-code', friendly(e)); }
+  });
+
+  /* ── session → app ───────────────────────────────────── */
+  function logAccess(evt){
+    return sb.rpc('log_access', { p_event: evt, p_user_agent: navigator.userAgent })
+      .then(function(r){ if (r.error) console.warn('[Auth] access log not written:', r.error.message); })
+      .catch(function(e){ console.warn('[Auth] access log not written:', e); });
+  }
+
+  async function unlock(session, evt){
+    if (unlocking || booted) return;
+    unlocking = true;
+    var email = session && session.user && session.user.email;
+    if (!isJsl(email)){
+      await sb.auth.signOut();
+      unlocking = false;
+      step('email'); msg('jsl-msg-email', 'This account is not a JSL Foods account.');
+      return;
+    }
+    if (!evt){
+      var last = Date.parse(session.user.last_sign_in_at || '') || 0;
+      evt = (Date.now() - last < 3 * 60 * 1000) ? 'sign_in' : 'app_open';
+    }
+    logAccess(evt);
+    sb.rpc('is_app_admin').then(function(r){ isAdmin = !r.error && r.data === true; }).catch(function(){});
+
+    $('jsl-chip-mail').textContent = email;
+    $('jsl-chip-av').textContent = email.charAt(0).toUpperCase();
+    $('jsl-chip-av').title = email;
+    $('jsl-user-chip').classList.add('on');
+    $('jsl-gate').classList.add('jsl-gone');
+    document.documentElement.classList.remove('jsl-locked');
+
+    booted = true;
+    try { if (typeof window._jslBoot === 'function') await window._jslBoot(); }
+    catch(e){ console.error('[Auth] app boot failed:', e); }
+  }
+
+  async function signOut(){
+    var btn = $('jsl-chip-out'); btn.disabled = true; btn.textContent = 'Signing out…';
+    try { await logAccess('sign_out'); } catch(e){}
+    try { localStorage.removeItem(CACHE_KEY); } catch(e){}
+    try { await sb.auth.signOut(); } catch(e){}
+    location.replace(location.origin + location.pathname);
+  }
+  $('jsl-chip-out').addEventListener('click', signOut);
+
+  async function start(){
+    var logo = document.querySelector('.logo-wrap img');
+    if (logo) $('jsl-gate-logo').src = logo.src;
+    if (!sb){ step('error'); return; }
+    sb.auth.onAuthStateChange(function(event, session){
+      if (event === 'SIGNED_IN' && session && !booted) setTimeout(function(){ unlock(session); }, 0);
+      if (event === 'SIGNED_OUT' && booted) location.replace(location.origin + location.pathname);
+    });
+    try {
+      var r = await sb.auth.getSession();
+      if (r.data && r.data.session) await unlock(r.data.session);
+      else if (!booted) step('email');
+    } catch(e){
+      console.error('[Auth] session check failed:', e);
+      step('email');
+    }
+  }
+  if (document.readyState === 'complete') start(); else window.addEventListener('load', start);
+
+  /* ── hidden access panel ─────────────────────────────── */
+  function fmt(ts){
+    if (!ts) return '—';
+    var d = new Date(ts);
+    return d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) + ' · ' +
+           d.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
+  }
+  function device(ua){
+    ua = ua || '';
+    var b = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
+    var o = /iPhone|iPad/.test(ua) ? 'iOS' : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Mac OS X/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : '';
+    return o ? b + ' · ' + o : b;
+  }
+  var EVT = { sign_in:'Signed in', app_open:'Opened app', sign_out:'Signed out' };
+
+  function stats(){
+    var now = Date.now(), day0 = new Date(); day0.setHours(0,0,0,0);
+    var d7 = now - 7*864e5, d30 = now - 30*864e5, active = {}, today = 0, m30 = 0;
+    accLog.forEach(function(r){
+      var t = Date.parse(r.created_at);
+      if (r.event === 'sign_out') return;
+      if (t >= day0.getTime()) today++;
+      if (t >= d30) m30++;
+      if (t >= d7) active[r.email] = 1;
+    });
+    $('jsl-st-users').textContent = accUsers.length;
+    $('jsl-st-7d').textContent = Object.keys(active).length;
+    $('jsl-st-today').textContent = today;
+    $('jsl-st-30d').textContent = m30;
+  }
+
+  function filtered(){
+    var q = $('jsl-acc-q').value.trim().toLowerCase();
+    var rows = accTab === 'users' ? accUsers : accLog;
+    return q ? rows.filter(function(r){ return (r.email || '').toLowerCase().indexOf(q) > -1; }) : rows;
+  }
+
+  function render(){
+    var rows = filtered(), body = $('jsl-acc-body'), h;
+    if (!rows.length){ body.innerHTML = '<div class="jsl-acc-empty">No records yet.</div>'; return; }
+    if (accTab === 'users'){
+      h = '<table class="jsl-acc-table"><thead><tr><th>Email</th><th>Registered</th><th>Last sign-in</th><th>Last seen</th><th style="text-align:right">Accesses</th></tr></thead><tbody>';
+      rows.forEach(function(r){
+        h += '<tr><td class="mail">' + esc(r.email) + '</td><td>' + fmt(r.registered_at) + '</td><td>' + fmt(r.last_sign_in_at) +
+             '</td><td>' + fmt(r.last_seen) + '</td><td class="num">' + esc(r.opens) + '</td></tr>';
+      });
+    } else {
+      h = '<table class="jsl-acc-table"><thead><tr><th>When</th><th>Email</th><th>Event</th><th>Device</th><th>IP</th></tr></thead><tbody>';
+      rows.forEach(function(r){
+        h += '<tr><td>' + fmt(r.created_at) + '</td><td class="mail">' + esc(r.email) + '</td><td><span class="jsl-acc-pill ' + esc(r.event) + '">' +
+             esc(EVT[r.event] || r.event) + '</span></td><td title="' + esc(r.user_agent) + '">' + esc(device(r.user_agent)) + '</td><td>' + esc(r.ip || '—') + '</td></tr>';
+      });
+    }
+    body.innerHTML = h + '</tbody></table>';
+  }
+
+  async function loadAccess(){
+    $('jsl-acc-body').innerHTML = '<div class="jsl-acc-empty">Loading…</div>';
+    var u = await sb.rpc('admin_access_overview');
+    var l = await sb.from('access_log').select('created_at,email,event,user_agent,ip').order('created_at', { ascending:false }).limit(2000);
+    if (u.error || l.error){
+      $('jsl-acc-body').innerHTML = '<div class="jsl-acc-empty">Could not load access data: ' + esc((u.error || l.error).message) + '</div>';
+      return;
+    }
+    accUsers = u.data || []; accLog = l.data || [];
+    stats(); render();
+  }
+
+  function exportCsv(){
+    var rows = filtered(), cols = accTab === 'users'
+      ? [['email','Email'],['registered_at','Registered'],['last_sign_in_at','Last sign-in'],['last_seen','Last seen'],['opens','Accesses']]
+      : [['created_at','When'],['email','Email'],['event','Event'],['user_agent','Device'],['ip','IP']];
+    var q = function(v){ return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; };
+    var lines = [cols.map(function(c){ return q(c[1]); }).join(',')];
+    rows.forEach(function(r){ lines.push(cols.map(function(c){ return q(r[c[0]]); }).join(',')); });
+    var blob = new Blob([lines.join('\r\n')], { type:'text/csv' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'JSL_FreightHub_' + (accTab === 'users' ? 'Users' : 'AccessLog') + '_' + new Date().toISOString().slice(0,10) + '.csv';
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+
+  function openAccess(){
+    if (!booted || !isAdmin) return;          // silent for everyone else
+    $('jsl-access').classList.add('on');
+    loadAccess();
+  }
+  function closeAccess(){ $('jsl-access').classList.remove('on'); }
+
+  document.addEventListener('keydown', function(e){
+    if (e.ctrlKey && e.altKey && (e.key === 'j' || e.key === 'J')){ e.preventDefault(); openAccess(); }
+    if (e.key === 'Escape' && $('jsl-access').classList.contains('on')) closeAccess();
+  });
+  $('jsl-chip-av').addEventListener('click', function(e){ if (e.detail === 3) openAccess(); });
+  $('jsl-acc-close').addEventListener('click', closeAccess);
+  $('jsl-access').addEventListener('click', function(e){ if (e.target === this) closeAccess(); });
+  $('jsl-acc-refresh').addEventListener('click', loadAccess);
+  $('jsl-acc-csv').addEventListener('click', exportCsv);
+  $('jsl-acc-q').addEventListener('input', render);
+  Array.prototype.forEach.call(document.querySelectorAll('.jsl-acc-tab'), function(t){
+    t.addEventListener('click', function(){
+      accTab = t.getAttribute('data-tab');
+      Array.prototype.forEach.call(document.querySelectorAll('.jsl-acc-tab'), function(x){ x.classList.toggle('on', x === t); });
+      render();
+    });
+  });
 })();
 </script>
 </body>

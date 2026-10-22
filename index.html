@@ -3443,10 +3443,16 @@ html.jsl-locked, html.jsl-locked body{ overflow:hidden !important; }
       <div class="section-title">Shipment History</div>
       <div class="section-sub">All inbound freight shipments — full record with edit and delete capabilities.</div>
     </div>
-    <button class="btn btn-success" onclick="openExportModal()">
-      <svg class="icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-      Export Report
-    </button>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button class="btn btn-blue" onclick="openExportModal('powerbi')">
+        <svg class="icon-sm" viewBox="0 0 24 24"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="7" width="4" height="14"/><rect x="17" y="3" width="4" height="18"/></svg>
+        Export to Power BI
+      </button>
+      <button class="btn btn-success" onclick="openExportModal()">
+        <svg class="icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export Report
+      </button>
+    </div>
   </div>
 
   <div class="metrics-grid" id="history-metrics"></div>
@@ -4257,6 +4263,30 @@ html.jsl-locked, html.jsl-locked body{ overflow:hidden !important; }
           The Excel report will include: <strong>Executive Summary sheet</strong> with KPI charts and savings analysis, 
           <strong>monthly breakdown tabs</strong>, <strong>carrier performance comparison</strong>, and 
           <strong>full shipment detail</strong>. Formatted professionally with JSL Foods branding.
+        </div>
+      </div>
+      <div id="pbi-block" style="margin-top:20px;border:1px solid #e5e7eb;border-radius:10px;padding:16px 18px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <svg class="icon-sm" viewBox="0 0 24 24"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="7" width="4" height="14"/><rect x="17" y="3" width="4" height="18"/></svg>
+          <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;">Power BI</div>
+        </div>
+        <div style="font-size:12px;color:#64748b;line-height:1.6;margin-bottom:12px;">
+          Use the <strong>live connection</strong> to refresh a Power BI dashboard straight from the database, or download a
+          <strong>data snapshot</strong> that follows the report type and date range selected above.
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button class="btn btn-blue" onclick="exportPowerBIData()">Power BI data (.xlsx)</button>
+          <button class="btn btn-outline" onclick="downloadPowerBIConnection()">Live connection file (.pbids)</button>
+          <button class="btn btn-outline" onclick="togglePBIGuide()">Setup guide</button>
+        </div>
+        <div id="pbi-guide" style="display:none;margin-top:12px;font-size:12px;color:#475569;line-height:1.7;background:#f8fafc;border-radius:8px;padding:12px 14px;">
+          <strong>Live connection</strong><br>
+          1. Open the downloaded <em>.pbids</em> file. Power BI Desktop asks for credentials; choose the <em>Database</em> tab.<br>
+          2. User: <code>powerbi_reader.eaexvxwynzgondwycfap</code>. The password is not stored in the app, ask Purchasing for it.<br>
+          3. In the navigator open the <em>powerbi</em> schema and load <em>fact_inbound</em>, <em>fact_transfer</em> and <em>fact_quotes</em>.<br>
+          4. First time only: if Power BI reports an invalid certificate, install the Supabase root certificate in Windows under Trusted Root Certification Authorities.<br>
+          <strong style="display:block;margin-top:8px;">Data snapshot</strong>
+          In Power BI Desktop use Get data &gt; Excel workbook and select the sheets <em>FactInbound</em>, <em>FactTransfer</em> and <em>FactQuotes</em>.
         </div>
       </div>
     </div>
@@ -6460,6 +6490,7 @@ function openExportModal(mode){
   document.querySelectorAll('#export-range-btns .export-range-btn').forEach(b=>{b.classList.toggle('active',b.dataset.range==='all');});
   document.getElementById('custom-range-fields').style.display='none';
   openModal('modal-export');
+  if(mode==='powerbi'){setTimeout(()=>{const b=document.getElementById('pbi-block');if(b)b.scrollIntoView({behavior:'smooth',block:'center'});},150);}
 }
 function setExportType(el,type){exportType=type;document.querySelectorAll('#export-type-btns .export-range-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');}
 function setExportRange(el,range){
@@ -6575,6 +6606,77 @@ function executeExport(){
   XLSX.writeFile(wb,'JSL_Foods_Freight_Report_'+new Date().toISOString().slice(0,10)+'.xlsx');
   closeModal('modal-export');
   showToast('Professional Excel report exported!','success');
+}
+
+// ═══════════════════════════════════════════════════════
+//  POWER BI EXPORT
+//  Columns mirror the powerbi.* views in Supabase so a dashboard can switch
+//  between the live connection and a snapshot without changes. The database
+//  password is never stored or shown here.
+// ═══════════════════════════════════════════════════════
+const PBI_SERVER='aws-1-us-west-2.pooler.supabase.com:5432';
+const PBI_DATABASE='postgres';
+function _pbiTempClass(t){
+  const v=String(t==null?'':t).trim();
+  if(!v||/^n\/?a$/i.test(v))return 'Ambient / N/A';
+  if(/^-\s*\d/.test(v))return 'Frozen';          // leading minus = below zero
+  const m=v.match(/^(\d+)/);                      // ranges like 32–36°F start with a digit
+  if(m)return parseInt(m[1],10)<=20?'Frozen':'Refrigerated';
+  return 'Other';
+}
+function _pbiPlant(p){return String(p||'').replace(/ Plant$/,'');}
+function _pbiDownload(blob,name){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);a.download=name;
+  document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500);
+}
+function togglePBIGuide(){
+  const g=document.getElementById('pbi-guide');
+  if(g)g.style.display=g.style.display==='none'?'block':'none';
+}
+function downloadPowerBIConnection(){
+  const pbids={version:'0.1',connections:[{details:{protocol:'postgresql',address:{server:PBI_SERVER,database:PBI_DATABASE},options:{}},mode:'Import'}]};
+  _pbiDownload(new Blob([JSON.stringify(pbids,null,2)],{type:'application/json'}),'JSL_Freight_Hub.pbids');
+  showToast('Connection file downloaded. Open it with Power BI Desktop.','success');
+}
+function exportPowerBIData(){
+  if(!window.XLSX){showToast('Excel library not loaded','error');return;}
+  let inbound=filterByRange([...shipments],'puDate');
+  let trs=filterByRange([...transfers],'date');
+  if(exportType==='inbound')trs=[];
+  if(exportType==='transfer')inbound=[];
+  const num=v=>(v===undefined||v===null||v===''||isNaN(v))?null:Number(v);
+  const quoteVals=q=>q?Object.values(q).map(Number).filter(n=>!isNaN(n)):[];
+  const inboundRows=inbound.map(s=>{
+    const qv=quoteVals(s.quotes);
+    return {
+      shipment_id:s.id,po_number:s.po||'',vendor:s.vendor||'',request_date:s.date||'',pickup_date:s.puDate||'',delivery_date:s.delDate||'',
+      plant:_pbiPlant(s.delLoc),load_type:s.type||'',temp_raw:s.temp||'',temp_class:_pbiTempClass(s.temp),
+      pallets:num(s.pallets),weight_lbs:num(s.weight),carrier_used:s.approved||'',
+      freight_cost:num(s.freightCost),approved_amount:num(s.approvedAmt),vendor_rate:num(s.vendorRate),
+      highest_quote:qv.length?Math.max(...qv):null,quote_count:qv.length,savings:num(s.saving)||0,savings_type:s.savingType||'',
+      status:s.status||'Pending',payment_status:(s.payment&&s.payment.status)||'',pickup_address:s.puAddr||''
+    };
+  });
+  const transferRows=trs.map(t=>({
+    transfer_id:t.id,ref_number:t.ref||'',request_date:t.date||'',pickup_date:t.puDate||'',delivery_date:t.delDate||'',
+    from_plant:_pbiPlant(t.from),to_plant:_pbiPlant(t.to),product:t.product||'',load_type:t.type||'',
+    temp_raw:t.temp||'',temp_class:_pbiTempClass(t.temp),pallets:num(t.pallets),weight_lbs:num(t.weight),
+    carrier_used:t.approved||'',freight_cost:num(t.approvedAmt),savings:num(t.saving)||0,
+    status:t.status||'Pending',payment_status:(t.payment&&t.payment.status)||''
+  }));
+  const quoteRows=[];
+  inbound.forEach(s=>Object.entries(s.quotes||{}).forEach(([c,a])=>quoteRows.push({record_type:'Inbound',record_id:s.id,reference:s.po||'',carrier:c,quote_amount:num(a),is_approved:c===s.approved,pickup_date:s.puDate||''})));
+  trs.forEach(t=>Object.entries(t.quotes||{}).forEach(([c,a])=>quoteRows.push({record_type:'Transfer',record_id:t.id,reference:t.ref||'',carrier:c,quote_amount:num(a),is_approved:c===t.approved,pickup_date:t.puDate||''})));
+  const wb=XLSX.utils.book_new();
+  const addSheet=(rows,header,name)=>XLSX.utils.book_append_sheet(wb,rows.length?XLSX.utils.json_to_sheet(rows):XLSX.utils.aoa_to_sheet([header]),name);
+  addSheet(inboundRows,['shipment_id','po_number','vendor','request_date','pickup_date','delivery_date','plant','load_type','temp_raw','temp_class','pallets','weight_lbs','carrier_used','freight_cost','approved_amount','vendor_rate','highest_quote','quote_count','savings','savings_type','status','payment_status','pickup_address'],'FactInbound');
+  addSheet(transferRows,['transfer_id','ref_number','request_date','pickup_date','delivery_date','from_plant','to_plant','product','load_type','temp_raw','temp_class','pallets','weight_lbs','carrier_used','freight_cost','savings','status','payment_status'],'FactTransfer');
+  addSheet(quoteRows,['record_type','record_id','reference','carrier','quote_amount','is_approved','pickup_date'],'FactQuotes');
+  XLSX.writeFile(wb,'JSL_Freight_PowerBI_Data_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  closeModal('modal-export');
+  showToast('Power BI data exported ('+inboundRows.length+' inbound, '+transferRows.length+' transfers)','success');
 }
 
 // ═══════════════════════════════════════════════════════

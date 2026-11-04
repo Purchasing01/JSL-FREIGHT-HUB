@@ -6314,6 +6314,7 @@ function deleteVendorFromList(name){
     renderVendors();
     populateVendorSelect();
     updateNavBadges();
+    saveToStorage();
     showToast('Vendor removed · Backup downloaded','warn');
   };
   openModal('modal-delete');
@@ -6371,6 +6372,7 @@ function deleteVendorDetail(){
     renderVendors();
     populateVendorSelect();
     updateNavBadges();
+    saveToStorage();
     showToast('Vendor removed · Backup downloaded','warn');
   };
   openModal('modal-delete');
@@ -7015,27 +7017,153 @@ function _queueSupabaseSave(){
   });
 }
 
-async function _saveToSupabase(){
-  if(!_sb)return;
-  // Store entire state as one JSON blob in app_meta — mirrors localStorage exactly
-  const state={
-    shipments:shipments,
-    transfers:transfers,
-    vendors:vendors,
-    nextId:nextId,
-    nextTrId:nextTrId
-  };
-  const{error}=await _sb.from('app_meta').upsert({
-    key:'app_state',
-    value:state,
-    updated_at:new Date().toISOString()
-  });
-  if(error){
-    console.error('Supabase save error:',error);
-    throw error;
-  }
-  console.log('✓ Saved to Supabase:',shipments.length,'shipments,',transfers.length,'transfers');
+// ── SAFE SAVE: merge with changes made elsewhere ─────────────────────────
+// Other places can change app_state while this tab is open: another browser,
+// or Claude through the Freight Hub MCP connector. Saving the whole blob from
+// memory would silently erase those changes. So every normal save:
+//   1. reads the current row and its updated_at,
+//   2. if someone else saved since we last synced, does a 3-way merge per record
+//      (base = what we last loaded/saved, local = this tab, remote = database):
+//      records this tab changed keep this tab's version; everything else takes
+//      the database version (including records added or deleted elsewhere),
+//   3. writes only if updated_at is still the same (retries up to 3 times).
+// Import / factory reset / cache recovery pass {replace:true} and overwrite on purpose.
+let _syncBase=null;     // deep copy of the state at the last load/save
+let _syncVersion=null;  // app_meta.updated_at at the last load/save
+const _DERIVED_KEYS=['saving','freightCost','savingType']; // recomputed on every render
+const _sameVer=(a,b)=>!!a&&!!b&&Date.parse(a)===Date.parse(b); // '...Z' vs '...+00:00'
+
+function _stableStr(v){
+  if(Array.isArray(v))return '['+v.map(_stableStr).join(',')+']';
+  if(v&&typeof v==='object')return '{'+Object.keys(v).sort().filter(k=>v[k]!==undefined).map(k=>JSON.stringify(k)+':'+_stableStr(v[k])).join(',')+'}';
+  return JSON.stringify(v===undefined?null:v);
 }
+function _recStr(r){
+  if(!r)return '';
+  const c={...r};_DERIVED_KEYS.forEach(k=>delete c[k]);
+  return _stableStr(c);
+}
+// Pure 3-way merge of one record list. keyFn gives the record key; idField, when
+// set, lets a locally added record that collides with a remotely added one get a new id.
+function _mergeList(base,local,remote,keyFn,idField){
+  const B=new Map((base||[]).map(r=>[keyFn(r),r]));
+  const L=new Map((local||[]).map(r=>[keyFn(r),r]));
+  const R=new Map((remote||[]).map(r=>[keyFn(r),r]));
+  const out=[];const reassign=[];const seen=new Set();
+  const order=[...(remote||[]).map(keyFn),...(local||[]).map(keyFn)];
+  for(const k of order){
+    if(seen.has(k))continue;seen.add(k);
+    const b=B.get(k),l=L.get(k),r=R.get(k);
+    const localChanged=_recStr(l)!==_recStr(b);
+    if(!localChanged){ if(r)out.push(r); continue; }
+    if(!l)continue;                                   // deleted in this tab
+    if(!b&&r&&idField&&_recStr(r)!==_recStr(l)){      // both sides added the same id
+      out.push(r);reassign.push(l);continue;
+    }
+    out.push(l);
+  }
+  if(idField&&reassign.length){
+    let max=out.reduce((m,x)=>Math.max(m,+x[idField]||0),0);
+    reassign.forEach(l=>{l[idField]=++max;out.push(l);});
+  }
+  return out;
+}
+function _mergeState(base,local,remote){
+  const maxId=a=>(a||[]).reduce((m,x)=>Math.max(m,+x.id||0),0);
+  const m={
+    ...remote,
+    shipments:_mergeList(base.shipments,local.shipments,remote.shipments,r=>'id:'+r.id,'id'),
+    transfers:_mergeList(base.transfers,local.transfers,remote.transfers,r=>'id:'+r.id,'id'),
+    vendors:_mergeList(base.vendors,local.vendors,remote.vendors,r=>'n:'+String(r.name||'').toLowerCase(),null)
+  };
+  m.nextId=Math.max(+local.nextId||0,+remote.nextId||0,maxId(m.shipments)+1);
+  m.nextTrId=Math.max(+local.nextTrId||0,+remote.nextTrId||0,maxId(m.transfers)+1);
+  return m;
+}
+function _stateStr(st){
+  return _stableStr({s:(st.shipments||[]).map(_recStr),t:(st.transfers||[]).map(_recStr),v:(st.vendors||[]).map(_recStr)});
+}
+function _currentState(){
+  return{shipments,transfers,vendors,nextId,nextTrId};
+}
+function _setSyncBase(state,version){
+  _syncBase=JSON.parse(JSON.stringify(state));
+  _syncVersion=version||null;
+}
+// Re-draws the lists after changes from elsewhere were merged into this tab.
+function _refreshAfterMerge(){
+  try{
+    populateVendorSelect();populateCompareSel();renderHistory();renderVendors();
+    if(typeof renderTransfers==='function')renderTransfers();
+    updateHeaderStats();updateNavBadges();
+  }catch(e){console.warn('[Sync] refresh after merge failed:',e);}
+}
+
+async function _saveToSupabase(opts){
+  if(!_sb)return;
+  const replace=!!(opts&&opts.replace);
+  if(replace||!_syncBase){
+    const now=new Date().toISOString();
+    const{error}=await _sb.from('app_meta').upsert({key:'app_state',value:_currentState(),updated_at:now});
+    if(error){console.error('Supabase save error:',error);throw error;}
+    _setSyncBase(_currentState(),now);
+    console.log('✓ Saved to Supabase'+(replace?' (full replace)':'')+':',shipments.length,'shipments,',transfers.length,'transfers');
+    return;
+  }
+  for(let attempt=0;attempt<3;attempt++){
+    const{data:row,error:readErr}=await _sb.from('app_meta').select('value,updated_at').eq('key','app_state').maybeSingle();
+    if(readErr){console.error('Supabase read-before-save error:',readErr);throw readErr;}
+    let merged=_currentState(),remoteChanged=false;
+    if(row&&row.value&&!_sameVer(row.updated_at,_syncVersion)){
+      remoteChanged=true;
+      merged=_mergeState(_syncBase,_currentState(),row.value);
+    }
+    const now=new Date().toISOString();
+    let q=_sb.from('app_meta').update({value:merged,updated_at:now}).eq('key','app_state');
+    q=row?q.eq('updated_at',row.updated_at):q;
+    const{data:upd,error}=await q.select('key');
+    if(error){console.error('Supabase save error:',error);throw error;}
+    if(!row){ // row missing (first run): create it
+      const{error:insErr}=await _sb.from('app_meta').upsert({key:'app_state',value:merged,updated_at:now});
+      if(insErr)throw insErr;
+    } else if(!upd||!upd.length){
+      console.warn('[Sync] data changed during save — retrying');
+      continue;
+    }
+    if(remoteChanged){
+      shipments=merged.shipments;transfers=merged.transfers;vendors=merged.vendors;
+      nextId=merged.nextId;nextTrId=merged.nextTrId;
+      try{localStorage.setItem(STORAGE_KEY,JSON.stringify(buildSnapshot()));}catch(e){}
+      _refreshAfterMerge();
+      console.log('✓ Merged changes made elsewhere (e.g. Claude) before saving');
+    }
+    _setSyncBase(merged,now);
+    console.log('✓ Saved to Supabase:',shipments.length,'shipments,',transfers.length,'transfers');
+    return;
+  }
+  throw new Error('Could not save: the data kept changing. Reload the page and try again.');
+}
+
+// Pull changes made elsewhere when the tab comes back into view, so this tab
+// shows them (and later saves start from them). Skipped while a save is running.
+async function _pullRemoteChanges(){
+  if(!_sb||!_supabaseOk||!_syncBase||_saveInProgress)return;
+  try{
+    const{data:row,error}=await _sb.from('app_meta').select('value,updated_at').eq('key','app_state').maybeSingle();
+    if(error||!row||!row.value||_sameVer(row.updated_at,_syncVersion)||_saveInProgress)return;
+    const merged=_mergeState(_syncBase,_currentState(),row.value);
+    const localPending=_stateStr(_currentState())!==_stateStr(_syncBase);
+    shipments=merged.shipments;transfers=merged.transfers;vendors=merged.vendors;
+    nextId=merged.nextId;nextTrId=merged.nextTrId;
+    _setSyncBase(row.value,row.updated_at);
+    if(typeof _migrateLoadedData==='function')_migrateLoadedData();
+    try{localStorage.setItem(STORAGE_KEY,JSON.stringify(buildSnapshot()));}catch(e){}
+    _refreshAfterMerge();
+    if(localPending)saveToStorage(); // this tab had unsaved changes: save the merged result
+    console.log('✓ Pulled changes made elsewhere');
+  }catch(e){console.warn('[Sync] pull failed:',e);}
+}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')_pullRemoteChanges();});
 
 
 // ── DATA MIGRATION ────────────────────────────────────────────────────────
@@ -7061,13 +7189,14 @@ function _migrateLoadedData(){
 async function loadFromSupabase(){
   if(!_sb){_supabaseOk=false;return false;}
   try{
-    const{data,error}=await _sb.from('app_meta').select('value').eq('key','app_state').maybeSingle();
+    const{data,error}=await _sb.from('app_meta').select('value,updated_at').eq('key','app_state').maybeSingle();
     if(error){
       console.error('Supabase load error:',JSON.stringify(error));
       throw error;
     }
     if(data&&data.value){
       const state=data.value;
+      _setSyncBase(state,data.updated_at); // what the database holds right now
       if(Array.isArray(state.shipments)&&state.shipments.length>0)shipments=state.shipments;
       if(Array.isArray(state.vendors)&&state.vendors.length>0)vendors=state.vendors;
       if(typeof state.nextId==='number'&&state.nextId>0)nextId=state.nextId;
@@ -7178,7 +7307,7 @@ function importData(file){
       // Push to Supabase first
       if(_supabaseOk){
         try{
-          await _saveToSupabase();
+          await _saveToSupabase({replace:true});
           showToast(`✓ Imported & synced to cloud — ${shipments.length} shipments, ${transfers.length} transfers`,'success');
         }catch(err){
           console.error('Supabase import sync failed:',err);
@@ -7219,7 +7348,7 @@ async function resetToFactoryData(){
   flashSaveStatus('saving');
   if(_supabaseOk){
     try{
-      await _saveToSupabase();
+      await _saveToSupabase({replace:true});
       showToast('Reset to factory data complete — cloud updated','warn');
     }catch(e){
       console.error('Supabase reset failed:',e);
@@ -7262,7 +7391,7 @@ async function recoverTransfersFromCache(){
     flashSaveStatus('saving');
     if(_supabaseOk){
       try{
-        await _saveToSupabase();
+        await _saveToSupabase({replace:true});
         showToast(`✓ Recovered ${transfers.length} transfers and synced to Supabase`,'success');
       }catch(e){
         console.error('Recovery sync failed:',e);
@@ -7291,7 +7420,7 @@ function _wrapAutoSave(){
   // Note: deleteShipment & deleteTransfer are NOT wrapped — they use modal
   // callbacks and call saveToStorage() themselves after the deletion completes.
   // Wrapping them would save the pre-delete state and cause a race condition.
-  const fns=['saveShipment','saveTransfer','saveQuotes','saveTransferQuotes','saveEdit','addVendor','editVendor','deleteVendor'];
+  const fns=['saveShipment','saveTransfer','saveQuotes','saveTransferQuotes','saveEdit','addVendor','editVendor','deleteVendor','saveVendor'];
   fns.forEach(name=>{
     const orig=window[name];
     if(typeof orig==='function'){

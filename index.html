@@ -4587,11 +4587,14 @@ window._jslBoot = async () => {
 
   // Trigger daily backup (silently — only saves if no backup exists for today)
   if(_supabaseOk){
-    fetch('https://eaexvxwynzgondwycfap.supabase.co/functions/v1/daily-backup',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:'{}'
-    }).then(r=>r.json()).then(d=>console.log('[Backup]',d.message||d)).catch(e=>console.warn('[Backup] skipped:',e));
+    Promise.resolve(typeof window._jslAccessToken==='function'?window._jslAccessToken():null).catch(()=>null).then(tok=>{
+      if(!tok) return {message:'skipped (not signed in)'};
+      return fetch('https://eaexvxwynzgondwycfap.supabase.co/functions/v1/daily-backup',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},
+        body:'{}'
+      }).then(r=>r.json());
+    }).then(d=>console.log('[Backup]',d.message||d)).catch(e=>console.warn('[Backup] skipped:',e));
   }
 
   // Wrap mutation functions to auto-save after each change

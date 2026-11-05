@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; img-src 'self' data: blob: https:; media-src 'self' data: blob:; connect-src 'self' https://eaexvxwynzgondwycfap.supabase.co wss://eaexvxwynzgondwycfap.supabase.co https://api.anthropic.com https://api.groq.com https://router.project-osrm.org https://api.weather.gov https://gibs.earthdata.nasa.gov https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>JSL Foods — Freight Command Center 2026</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -8068,7 +8070,7 @@ function _showAiReviewModal(ext,imageB64){
   const confColors={high:'#15803d',medium:'#d97706',low:'#dc2626'};
   document.getElementById('ai-confidence-summary').innerHTML=`<span style="color:${confColors[conf]};font-weight:700;">${conf.toUpperCase()} confidence</span> · ${ext.fields_found||0} fields detected`;
   const vendorNote=document.getElementById('ai-vendor-note');
-  if(ext.vendor_is_new&&ext.vendor){vendorNote.style.display='block';vendorNote.innerHTML=`<strong>⚠ New vendor:</strong> "${ext.vendor}" is not in your list yet.`;}
+  if(ext.vendor_is_new&&ext.vendor){vendorNote.style.display='block';vendorNote.innerHTML=`<strong>⚠ New vendor:</strong> "${String(ext.vendor).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}" is not in your list yet.`;}
   else{vendorNote.style.display='none';}
   const FIELD_DEFS=[
     {key:'vendor',label:'Vendor / Supplier',full:false},
@@ -12071,7 +12073,7 @@ CRITICAL OUTPUT RULES — answers must be clean, scannable and ACTION-READY:
     mapwrap.classList.add('fx-labels-on');
     var cards = [], pins = [], raf = 0, until = 0;
 
-    function esc(t){ return String(t == null ? '' : t).replace(/[&<>"]/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]; }); }
+    function esc(t){ return String(t == null ? '' : t).replace(/[&<>"']/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); }
     function center(el){ var r = el.getBoundingClientRect(); return { x:r.left + r.width / 2, y:r.top + r.height / 2, ok:r.width > 0 }; }
     function num(el, a, d){ var v = el ? parseFloat(el.getAttribute(a)) : NaN; return isFinite(v) ? v : d; }
 
@@ -13956,7 +13958,7 @@ html.fx-off #yk-char .yk-steam path{ opacity:.35; }
    lays them out. Text, row order and the auto-print script are kept, and
    any error falls back to the original template. */
 (function(){
-  function esc(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
   var PRINT = '<script>window.onload=function(){setTimeout(function(){window.print();},600);}<\/script>';
   var CSS = [
     "@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap');",
@@ -15947,5 +15949,4 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
 </script>
 </body>
 </html>
-
 

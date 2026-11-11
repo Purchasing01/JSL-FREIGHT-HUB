@@ -16042,7 +16042,8 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
 .jv-m.ok{ align-self:flex-start; color:#166534; font-weight:600; }
 .jv-m.err{ align-self:flex-start; color:#b91c1c; font-weight:600; }
 .jv-m.hint{ align-self:center; color:#94a3b8; font-size:12.5px; }
-.jv-files{ align-self:flex-start; display:flex; flex-wrap:wrap; gap:6px; }
+.jv-files{ align-self:flex-start; display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+.jv-files .jv-ok{ color:#166534; font-weight:800; }
 .jv-files a{ font-size:12.5px; font-weight:600; color:#9b1c1c; background:#fef2f2; border:1px solid #f3d6d6; border-radius:8px; padding:4px 9px; text-decoration:none; overflow-wrap:anywhere; }
 .jv-files a:hover{ background:#fee2e2; }
 #jv-confirm{ margin:10px 14px 2px; border:1px solid #f0d9d9; border-radius:14px; background:linear-gradient(180deg,#fffdfd,#fff7f7); overflow:hidden; }
@@ -16123,7 +16124,7 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
       <div id="jv-c-fields"></div><datalist id="jv-vendors"></datalist>
       <div id="jv-c-warn"></div>
       <div id="jv-c-act">
-        <span>Nothing is saved until you confirm. Say “confirmo”, “cancela” or what to change — or edit the fields.</span>
+        <span>“Confirmo”, “cancela” o di qué cambiar.</span>
         <button class="jv-btn" id="jv-c-no" type="button">Cancel</button>
         <button class="jv-btn go" id="jv-c-yes" type="button">Confirm</button>
       </div>
@@ -16198,7 +16199,7 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
 
   /* ── confirmation card: every simple field can be fixed by hand ── */
   function showCard(c){
-    card = c; pending = { tool:c.tool, args:c.args };
+    card = c; pending = { tool:c.tool, args:c.args, need:c.need };
     $('jv-c-title').textContent = c.title || 'Confirm change';
     $('jv-c-head').textContent = c.headline || '';
     $('jv-c-head').style.display = c.headline ? '' : 'none';
@@ -16239,6 +16240,7 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
     $('jv-confirm').hidden = false;
     $('jv-c-yes').disabled = false; $('jv-c-no').disabled = false;
   }
+  function cardEs(){ return lastLang ? /^(es|spa)/i.test(lastLang) : !!(card && /[¿¡]|Me falta/.test(card.speech || '')); }
   function hideCard(){ pending = null; card = null; $('jv-confirm').hidden = true; if (mini) $('jv-bpill').classList.remove('on'); }
   function dropCard(){ printAfter = false; hideCard(); }
   // the card as it stands now, hand edits included
@@ -16254,7 +16256,7 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
       a[k] = kind === 'number' ? Number(v) : v;
       if (kind === 'number' && !isFinite(a[k])) delete a[k];
     });
-    return { tool:pending.tool, args:a };
+    return { tool:pending.tool, args:a, need:pending.need };
   }
   function firstMissing(){
     return Array.prototype.filter.call($('jv-c-fields').querySelectorAll('[data-req]'), function(el){
@@ -16315,10 +16317,9 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
       remember('assistant', 'Card shown: ' + (r.card.title || r.card.tool) + ' ' + (r.card.headline || '') + (r.card.missing && r.card.missing.length ? ' (missing: ' + r.card.missing.join(', ') + ')' : ''));
       return r.card.speech || r.text || '';
     }
-    if (r.type === 'cancelled'){ dropCard(); msg('Cancelled — nothing was saved.', 'hint'); remember('assistant', 'Cancelled.'); return r.speech || ''; }
+    if (r.type === 'cancelled'){ dropCard(); msg(isEs(r.speech) ? 'Cancelado.' : 'Cancelled.', 'hint'); remember('assistant', 'Cancelled.'); return r.speech || ''; }
     if (r.type === 'client'){
-      if (r.text) msg(r.text, 'a');
-      remember('assistant', r.text || 'Downloading documents.');
+      remember('assistant', 'Downloading documents.');
       if (r.action && r.action.name === 'download') queued = r.action;
       return r.speech || '';
     }
@@ -16328,10 +16329,11 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
         if (printAfter && r.record && !r.then) queued = { name:'download', kind:r.record.kind, id:r.record.id, po:r.record.po, ref:r.record.ref };
         printAfter = false;
         if (r.then && r.then.name === 'download') queued = r.then;
-        hideCard(); msg('✓ ' + r.text, 'ok'); remember('assistant', 'Saved: ' + r.text);
+        var rc = r.record || {}, what = rc.po ? 'PO ' + rc.po : rc.ref ? rc.ref : (card && card.headline) || '';
+        hideCard(); msg('✓ ' + (/^(Guardado|No se)/.test(r.speech || '') || isEs(r.speech) ? 'Guardado' : 'Saved') + (what ? ' · ' + what : '') + (rc.id ? ' (#' + rc.id + ')' : ''), 'ok'); remember('assistant', 'Saved: ' + r.text);
         try { if (typeof _pullRemoteChanges === 'function') _pullRemoteChanges(); } catch(e){}   // show the change in this tab right away
-        try { if (typeof showToast === 'function') showToast('Saved by voice', 'success'); } catch(e){}
       } else {
+        if (r.printAfter) printAfter = true;
         $('jv-c-yes').disabled = false; $('jv-c-no').disabled = false;
         msg('Not saved — ' + r.text, 'err'); remember('assistant', 'Not saved: ' + r.text);
         var m = firstMissing(); if (m){ m.classList.add('miss'); }
@@ -16352,7 +16354,7 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
     if (queued){
       var job = queued; queued = null;
       setPhase('busy', 'Preparing documents…');
-      try { msg('✓ Downloaded: ' + (await downloadRecord(job)), 'ok'); }
+      try { await downloadRecord(job); }
       catch(e){ msg(e.message || 'Could not download the documents.', 'err'); spoken = isEs(spoken) ? 'No pude descargar los documentos.' : 'I couldn’t download the documents.'; }
     }
     say(spoken, resume);
@@ -16377,10 +16379,10 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
   function confirmCard(){
     if (!pending || phase === 'busy') return;
     var miss = firstMissing();
-    if (miss){ miss.classList.add('miss'); try { miss.focus(); } catch(e){} msg('Fill in the highlighted field first — say it or type it.', 'hint'); return; }
+    if (miss){ miss.classList.add('miss'); try { miss.focus(); } catch(e){} msg(cardEs() ? 'Completa lo marcado — dilo o escríbelo.' : 'Fill in the highlighted fields — say them or type them.', 'hint'); return; }
     $('jv-c-yes').disabled = true; $('jv-c-no').disabled = true;
     var p = cardArgs();
-    run(function(){ return call({ action:'confirm', pending:p, language:lastLang }); });
+    run(function(){ return call({ action:'confirm', pending:p, language:lastLang || (cardEs() ? 'es' : 'en') }); });
   }
 
   /* ── print / download: the Hub's own Save & Download files for an existing record ──
@@ -16466,7 +16468,6 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
     var img = got.filter(function(x){ return /\.jpg$/i.test(x.name); })[0], js = got.filter(function(x){ return /\.json$/i.test(x.name); })[0];
     showFiles(got);
     if (!img) throw new Error('The quote image could not be generated' + (js ? ' (the JSON backup was downloaded)' : '') + '. Try the Save & Download button, or say it again.');
-    try { if (typeof showToast === 'function') showToast((isTr ? rec.ref : 'PO ' + (rec.po || '#' + rec.id)) + ' · document + Backup-' + seq + ' ready', 'success'); } catch(e){}
     return img.name + (js ? ' + ' + js.name : '') + '. If Chrome blocked them, click the links below.';
   }
   // Every file the Hub's own code downloads goes through <a download>.click(). While a job runs, those clicks
@@ -16492,6 +16493,7 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
   function showFiles(list){
     if (!list.length) return;
     var d = document.createElement('div'); d.className = 'jv-m jv-files';
+    var ok = document.createElement('span'); ok.className = 'jv-ok'; ok.textContent = '✓'; d.appendChild(ok);
     list.forEach(function(x){
       var a = document.createElement('a'); a.href = x.url; a.download = x.name; a.textContent = (/\.jpg$/i.test(x.name) ? '🖼 ' : '🗂 ') + x.name;
       d.appendChild(a);
@@ -16617,7 +16619,7 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
   function show(){
     if (open) return;
     open = true; applyMode(); setPhase(phase);
-    if (!log.children.length) msg('Just say it all in one go: “Nueva quote, PO 45821, vendor Ajinomoto, 22 pallets frozen, pickup mañana, para Pasadena”  ·  “Which loads are in transit?”', 'hint');
+    if (!log.children.length) msg('Ej.: “Nueva quote de Italgrani, PO 5555, viernes, para Indiana”', 'hint');
     if (!pinged){ pinged = true; token().then(function(t){ if (t) fetch(FN, { method:'POST', headers:{ 'Authorization':'Bearer ' + t, 'Content-Type':'application/json' }, body:'{"action":"ping"}' }).catch(function(){}); }); }
   }
   function hide(){
@@ -16690,7 +16692,7 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
   $('jv-text').addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); sendText(); } });
   $('jv-c-yes').addEventListener('click', confirmCard);
   $('jv-c-fields').addEventListener('keydown', function(e){ if (e.key === 'Enter' && e.target && e.target.tagName === 'INPUT'){ e.preventDefault(); confirmCard(); } });
-  $('jv-c-no').addEventListener('click', function(){ if (phase === 'busy') return; dropCard(); msg('Cancelled — nothing was saved.', 'hint'); remember('assistant', 'Cancelled.'); setPhase(phase); });
+  $('jv-c-no').addEventListener('click', function(){ if (phase === 'busy') return; dropCard(); msg(isEs('') ? 'Cancelado.' : 'Cancelled.', 'hint'); remember('assistant', 'Cancelled.'); setPhase(phase); });
   $('jv-speak').addEventListener('click', function(){
     speak = !speak; this.setAttribute('aria-pressed', speak ? 'true' : 'false');
     try { localStorage.setItem('jsl_voice_speak', speak ? '1' : '0'); } catch(e){}

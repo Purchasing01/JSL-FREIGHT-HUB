@@ -15991,6 +15991,36 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
 #jv-root{ position:fixed; left:50%; bottom:74px; transform:translate(-50%,16px); width:min(580px,calc(100vw - 24px)); z-index:9994;
   font-family:'Inter','Aptos','Segoe UI',system-ui,sans-serif; opacity:0; pointer-events:none; transition:opacity .22s ease, transform .22s cubic-bezier(.2,.8,.2,1); }
 #jv-root.on{ opacity:1; pointer-events:auto; transform:translate(-50%,0); }
+/* moved by the user: placed with left/top instead of centered */
+#jv-root.placed{ transform:translate(0,16px); bottom:auto; }
+#jv-root.placed.on{ transform:none; }
+#jv-head{ cursor:grab; user-select:none; -webkit-user-select:none; touch-action:none; }
+#jv-root.dragging, #jv-root.dragging #jv-head{ cursor:grabbing; transition:none; }
+#jv-root.dragging #jv-card{ box-shadow:0 1px 0 #fff inset, 0 40px 70px -24px rgba(69,10,10,.55), 0 14px 30px -14px rgba(15,23,42,.32); }
+/* minimized: just the mic */
+#jv-bubble{ position:fixed; left:24px; bottom:86px; z-index:9995; display:none; align-items:center; gap:8px; font-family:'Inter','Aptos','Segoe UI',system-ui,sans-serif; touch-action:none; }
+#jv-bubble.on{ display:flex; }
+#jv-bmic{ position:relative; width:58px; height:58px; border-radius:50%; border:none; cursor:pointer; color:#fff; flex:none; display:grid; place-items:center;
+  background:linear-gradient(180deg,#c0392b,#9b1c1c); box-shadow:0 14px 26px -10px rgba(155,28,28,.8), 0 1px 0 rgba(255,255,255,.35) inset; }
+#jv-bmic svg{ width:24px; height:24px; position:relative; }
+#jv-bmic::before{ content:''; position:absolute; inset:-5px; border-radius:50%; border:2px solid transparent; transform:scale(var(--jv-lvl,1)); transition:transform .08s linear, border-color .2s; }
+#jv-bubble[data-state="listen"] #jv-bmic::before{ border-color:rgba(22,163,74,.6); }
+#jv-bubble[data-state="rec"] #jv-bmic{ background:linear-gradient(180deg,#ef4444,#b91c1c); }
+#jv-bubble[data-state="rec"] #jv-bmic::before{ border-color:rgba(220,38,38,.65); }
+#jv-bubble[data-state="busy"] #jv-bmic::before{ border-color:rgba(217,119,6,.65); animation:jvSpin 1s linear infinite; border-top-color:transparent; }
+#jv-bubble[data-state="speak"] #jv-bmic::before{ border-color:rgba(37,99,235,.55); }
+@keyframes jvSpin{ to{ transform:rotate(360deg); } }
+#jv-bgrip{ position:absolute; left:-4px; top:-4px; width:20px; height:20px; border-radius:50%; background:#fff; border:1px solid #ecdcdc; color:#94a3b8; display:grid; place-items:center; cursor:grab; box-shadow:0 2px 6px rgba(15,23,42,.12); }
+#jv-bgrip svg{ width:11px; height:11px; }
+#jv-bexp{ width:30px; height:30px; border-radius:50%; border:1px solid #ecdcdc; background:#fff; color:#64748b; cursor:pointer; display:grid; place-items:center; box-shadow:0 6px 14px -8px rgba(15,23,42,.35); flex:none; }
+#jv-bexp:hover{ color:#9b1c1c; border-color:#f3d6d6; }
+#jv-bexp svg{ width:14px; height:14px; }
+#jv-bpill{ display:none; align-items:center; gap:8px; max-width:min(360px,calc(100vw - 130px)); background:rgba(255,255,255,.98); border:1px solid #ecdcdc; border-radius:14px; padding:8px 10px 8px 12px;
+  box-shadow:0 18px 34px -16px rgba(69,10,10,.45); font-size:13px; color:#1e293b; }
+#jv-bpill.on{ display:flex; }
+#jv-bpill span{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; line-height:1.35; }
+#jv-bpill .jv-btn{ padding:6px 11px; font-size:12px; flex:none; }
+#jv-root.mini{ display:none; }
 #jv-card{ background:rgba(255,255,255,.97); border:1px solid #ecdcdc; border-radius:20px; overflow:hidden;
   box-shadow:0 1px 0 #fff inset, 0 30px 60px -22px rgba(69,10,10,.45), 0 10px 24px -14px rgba(15,23,42,.28); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); }
 #jv-head{ display:flex; align-items:center; gap:10px; padding:12px 14px 10px 18px; border-bottom:1px solid #f4e9e9; }
@@ -16028,6 +16058,9 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
 #jv-c-fields input:focus, #jv-c-fields select:focus{ border-color:#c0392b; box-shadow:0 0 0 3px rgba(192,57,43,.12); }
 #jv-c-fields .miss{ border-color:#f59e0b !important; background:#fffbeb !important; }
 #jv-c-fields label.miss-l{ color:#b45309; }
+#jv-c-fields .jv-autoin{ border-color:#bfdbfe !important; background:#f5f9ff !important; }
+#jv-c-fields label .jv-tag{ display:inline-block; margin-left:6px; font-size:9.5px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#2563eb; background:#eff6ff; border:1px solid #dbeafe; border-radius:5px; padding:0 4px; vertical-align:1px; }
+.jv-m.mem{ align-self:flex-start; color:#1d4ed8; font-weight:600; font-size:13px; }
 #jv-c-fields input[type="checkbox"]{ width:16px; height:16px; accent-color:#b91c1c; justify-self:start; }
 #jv-c-warn{ margin:0 14px 10px; padding:7px 10px; border-radius:9px; background:#fffbeb; border:1px solid #fde68a; color:#92400e; font-size:12.5px; font-weight:600; }
 #jv-c-warn:empty{ display:none; }
@@ -16065,7 +16098,7 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
 @media (max-width:900px){ .jv-nav-btn kbd{ display:none; } }
 @media (max-width:600px){ #jv-root{ bottom:14px; } #jv-c-head{ font-size:22px; } }
 @media (prefers-reduced-motion:reduce){ #jv-root{ transition:none; } #jv-dots i{ animation:none; } #jv-mic::before{ transition:none; } }
-@media print{ #jv-root, .jv-nav-btn{ display:none !important; } }
+@media print{ #jv-root, #jv-bubble, .jv-nav-btn{ display:none !important; } }
 </style>
 
 <div id="jv-root" data-state="idle" data-html2canvas-ignore="true" role="dialog" aria-label="Voice assistant" aria-hidden="true">
@@ -16076,6 +16109,9 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
       <span id="jv-dots" aria-hidden="true"><i></i><i></i><i></i></span>
       <button class="jv-ib" id="jv-speak" type="button" aria-pressed="false" title="Read answers aloud" aria-label="Read answers aloud">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 010 7"/><path d="M18.4 5.6a9 9 0 010 12.8"/></svg>
+      </button>
+      <button class="jv-ib" id="jv-min" type="button" title="Minimize to the mic" aria-label="Minimize">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 12h12"/></svg>
       </button>
       <button class="jv-ib" id="jv-close" type="button" title="Close (Esc)" aria-label="Close voice assistant">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -16104,6 +16140,19 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
   </div>
 </div>
 
+<div id="jv-bubble" data-state="idle" data-html2canvas-ignore="true" aria-label="Voice assistant (minimized)">
+  <div style="position:relative;">
+    <button id="jv-bmic" type="button" title="Start / end the conversation (Space)" aria-label="Start or end the voice conversation">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0014 0v-1"/><path d="M12 18v4"/></svg>
+    </button>
+    <span id="jv-bgrip" title="Drag to move" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="8" cy="7" r="2"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/><circle cx="16" cy="17" r="2"/></svg></span>
+  </div>
+  <button id="jv-bexp" type="button" title="Open the full window" aria-label="Open the full voice window">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+  </button>
+  <div id="jv-bpill" role="status" aria-live="polite"><span id="jv-btext"></span><button class="jv-btn go" id="jv-byes" type="button">Confirm</button><button class="jv-btn" id="jv-bopen" type="button">Open</button></div>
+</div>
+
 <script id="jsl-voice-js">
 (function(){
   'use strict';
@@ -16113,15 +16162,16 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
   var $ = function(id){ return document.getElementById(id); };
   var root = $('jv-root'), log = $('jv-log'), statusEl = $('jv-status'), navBtn = $('jv-open');
   if (!root) return;
-  var open = false, live = false, phase = 'idle', history = [], pending = null, card = null, lastTools = [], lastLang = '', speak = true, pinged = false, lastSaved = null, queued = null, printAfter = false, saying = '', echoText = '';
+  var open = false, live = false, phase = 'idle', history = [], pending = null, card = null, lastTools = [], lastLang = '', speak = true, pinged = false, lastSaved = null, queued = null, printAfter = false, saying = '', echoText = '', mini = false, pillTimer = 0;
   var stream = null, ac = null, node = null, srcNode = null, sink = null, sr = 48000;
   var pre = [], utter = [], hot = 0, quiet = 0, voiced = 0, utterMs = 0, uPeak = 0, echo = 0, spokeMs = 0, hotPeak = 0, stopSpeech = null, noise = 0.004, lastSpeechAt = 0, levels = [], raf = 0, ctl = null, starting = false, speakTimer = 0;
-  try { speak = localStorage.getItem('jsl_voice_speak') !== '0'; } catch(e){}
+  try { speak = localStorage.getItem('jsl_voice_speak') !== '0'; mini = localStorage.getItem('jsl_voice_mini') === '1'; } catch(e){}
+  var bubble = $('jv-bubble');
   $('jv-speak').setAttribute('aria-pressed', speak ? 'true' : 'false');
 
   var LABEL = { idle:'Press Space and just talk', listen:'Listening — just talk', rec:'Listening…', busy:'Working', speak:'Speaking — just talk to interrupt' };
   function setPhase(p, label){
-    phase = p; root.setAttribute('data-state', p); root.classList.toggle('live', live);
+    phase = p; root.setAttribute('data-state', p); root.classList.toggle('live', live); if (bubble) bubble.setAttribute('data-state', live || p === 'busy' || p === 'speak' ? p : 'idle');
     statusEl.textContent = label || (p === 'idle' && pending ? 'Waiting for your confirmation' : LABEL[p]);
     if (navBtn) navBtn.classList.toggle('live', live);
   }
@@ -16130,7 +16180,17 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
     log.appendChild(d);
     while (log.children.length > 14) log.removeChild(log.firstChild);
     log.scrollTop = log.scrollHeight;
+    if (mini && cls !== 'u' && cls !== 'hint') pill(text, false);
     return d;
+  }
+  // minimized: the latest line next to the mic; a card shows Confirm / Open
+  function pill(text, withCard){
+    var p = $('jv-bpill'); clearTimeout(pillTimer);
+    $('jv-btext').textContent = text;
+    $('jv-byes').style.display = withCard && card && !(card.missing && card.missing.length) ? '' : 'none';
+    $('jv-bopen').style.display = withCard ? '' : 'none';
+    p.classList.add('on');
+    if (!withCard) pillTimer = setTimeout(function(){ if (!pending) p.classList.remove('on'); }, 9000);
   }
   function remember(role, text){ if (!text) return; history.push({ role:role, text:String(text).slice(0, 800) }); if (history.length > 10) history = history.slice(-10); }
   function today(){ var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
@@ -16146,6 +16206,7 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
     (c.fields || []).forEach(function(f, i){
       var id = 'jv-f-' + i, lab = document.createElement('label'), el;
       lab.textContent = f.label + (f.required ? ' *' : ''); lab.htmlFor = id;
+      if (f.auto){ var tg = document.createElement('span'); tg.className = 'jv-tag'; tg.textContent = 'usual'; tg.title = 'Filled from this vendor’s past loads'; lab.appendChild(tg); }
       if (f.kind === 'select'){
         el = document.createElement('select');
         var opts = (f.options || []).slice();
@@ -16170,6 +16231,7 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
       el.id = id; el.setAttribute('data-key', f.key); el.setAttribute('data-kind', f.kind);
       if (f.required) el.setAttribute('data-req', '1');
       if (f.missing){ el.classList.add('miss'); lab.classList.add('miss-l'); }
+      if (f.auto && f.kind !== 'readonly'){ el.classList.add('jv-autoin'); el.addEventListener('input', function(){ el.classList.remove('jv-autoin'); }); }
       if (f.kind !== 'readonly') el.addEventListener('input', function(){ el.classList.toggle('miss', f.required && !String(el.value || '').trim()); lab.classList.toggle('miss-l', el.classList.contains('miss')); });
       box.appendChild(lab); box.appendChild(el);
     });
@@ -16177,7 +16239,7 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
     $('jv-confirm').hidden = false;
     $('jv-c-yes').disabled = false; $('jv-c-no').disabled = false;
   }
-  function hideCard(){ pending = null; card = null; $('jv-confirm').hidden = true; }
+  function hideCard(){ pending = null; card = null; $('jv-confirm').hidden = true; if (mini) $('jv-bpill').classList.remove('on'); }
   function dropCard(){ printAfter = false; hideCard(); }
   // the card as it stands now, hand edits included
   function cardArgs(){
@@ -16243,11 +16305,13 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
     if (r.language) lastLang = r.language;
     if (Array.isArray(r.tools)) lastTools = r.tools;
     if (r.transcript){ msg(r.transcript, 'u'); remember('user', r.transcript); }
+    if (Array.isArray(r.memory)) r.memory.forEach(function(m){ msg('🧠 ' + (/^Forgot: /.test(m) ? m : 'Remembered: ' + m), 'mem'); });
     if (r.type === 'empty') return '';
     if (r.type === 'answer'){ msg(r.text, 'a'); remember('assistant', r.text); return r.text; }
     if (r.type === 'confirm'){
       if (r.printAfter) printAfter = true;
       showCard(r.card);
+      if (mini) pill((r.card.headline ? r.card.headline + ' · ' : '') + (r.card.missing && r.card.missing.length ? 'missing ' + r.card.missing.join(', ').replace(/_/g, ' ') : (r.card.title || 'Confirm?')), true);
       remember('assistant', 'Card shown: ' + (r.card.title || r.card.tool) + ' ' + (r.card.headline || '') + (r.card.missing && r.card.missing.length ? ' (missing: ' + r.card.missing.join(', ') + ')' : ''));
       return r.card.speech || r.text || '';
     }
@@ -16497,7 +16561,7 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
   function draw(){
     raf = requestAnimationFrame(draw);
     var c = $('jv-wave'), w = c.clientWidth, h = c.clientHeight, dpr = window.devicePixelRatio || 1;
-    if (!w) return;
+    if (!w){ var lv = (phase === 'listen' || phase === 'rec') ? (levels[levels.length - 1] || 0) : 0; $('jv-bmic').style.setProperty('--jv-lvl', String(1 + Math.min(0.35, lv * 6))); return; }
     if (c.width !== Math.round(w * dpr)){ c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
     var g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
     var bars = Math.max(12, Math.floor(w / 6)), bw = w / bars, on = phase === 'rec', calm = phase !== 'listen' && phase !== 'rec';
@@ -16507,7 +16571,7 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
       g.fillRect(i * bw + 1, (h - bh) / 2, Math.max(2, bw - 2.5), bh);
     }
     var lvl = calm ? 0 : (levels[levels.length - 1] || 0);
-    $('jv-mic').style.setProperty('--jv-lvl', String(1 + Math.min(0.45, lvl * 6)));
+    $('jv-mic').style.setProperty('--jv-lvl', String(1 + Math.min(0.45, lvl * 6))); $('jv-bmic').style.setProperty('--jv-lvl', String(1 + Math.min(0.35, lvl * 6)));
   }
   function releaseMic(){
     cancelAnimationFrame(raf);
@@ -16552,15 +16616,72 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
   /* ── open / close ── */
   function show(){
     if (open) return;
-    open = true; root.classList.add('on'); root.setAttribute('aria-hidden', 'false'); setPhase(phase);
+    open = true; applyMode(); setPhase(phase);
     if (!log.children.length) msg('Just say it all in one go: “Nueva quote, PO 45821, vendor Ajinomoto, 22 pallets frozen, pickup mañana, para Pasadena”  ·  “Which loads are in transit?”', 'hint');
     if (!pinged){ pinged = true; token().then(function(t){ if (t) fetch(FN, { method:'POST', headers:{ 'Authorization':'Bearer ' + t, 'Content-Type':'application/json' }, body:'{"action":"ping"}' }).catch(function(){}); }); }
   }
   function hide(){
     if (!open) return;
     stopLive(); if (ctl){ try { ctl.abort(); } catch(e){} }
-    open = false; root.classList.remove('on'); root.setAttribute('aria-hidden', 'true');
+    open = false; root.classList.remove('on'); root.setAttribute('aria-hidden', 'true'); bubble.classList.remove('on'); $('jv-bpill').classList.remove('on');
   }
+  function applyMode(){
+    root.classList.toggle('mini', mini);
+    root.classList.toggle('on', open && !mini); root.setAttribute('aria-hidden', open && !mini ? 'false' : 'true');
+    bubble.classList.toggle('on', open && mini);
+    if (!mini) $('jv-bpill').classList.remove('on');
+    else if (pending && card) pill((card.headline ? card.headline + ' · ' : '') + (card.title || 'Confirm?'), true);
+    try { localStorage.setItem('jsl_voice_mini', mini ? '1' : '0'); } catch(e){}
+    clampAll();
+  }
+  function minimize(){ mini = true; applyMode(); }
+  function expand(){ mini = false; applyMode(); setTimeout(function(){ log.scrollTop = log.scrollHeight; }, 30); }
+
+  /* drag: the window by its header, the mic by itself or its grip; positions are remembered per browser */
+  function loadPos(key){ try { var v = JSON.parse(localStorage.getItem(key) || 'null'); return v && isFinite(v.x) && isFinite(v.y) ? v : null; } catch(e){ return null; } }
+  function savePos(key, x, y){ try { localStorage.setItem(key, JSON.stringify({ x:Math.round(x), y:Math.round(y) })); } catch(e){} }
+  function place(el, x, y){
+    var w = el.offsetWidth || 300, h = el.offsetHeight || 80;
+    x = Math.max(8, Math.min(window.innerWidth - w - 8, x)); y = Math.max(8, Math.min(window.innerHeight - Math.min(h, 120) - 8, y));
+    el.style.left = x + 'px'; el.style.top = y + 'px'; el.style.bottom = 'auto'; el.style.right = 'auto';
+    return { x:x, y:y };
+  }
+  function clampAll(){
+    var a = loadPos('jsl_voice_pos'); if (a && !mini){ root.classList.add('placed'); place(root, a.x, a.y); }
+    var b = loadPos('jsl_voice_bubble'); if (b && mini) place(bubble, b.x, b.y);
+  }
+  function draggable(handle, el, key, onPlace, isClick){
+    var sx = 0, sy = 0, ox = 0, oy = 0, moving = false, down = false, pid = null;
+    handle.addEventListener('pointerdown', function(e){
+      if (e.button !== 0 || (e.target.closest && e.target.closest('button,input,select,a') && e.target.closest('button,input,select,a') !== handle)) return;
+      var r = el.getBoundingClientRect(); down = true; moving = false; pid = e.pointerId;
+      sx = e.clientX; sy = e.clientY; ox = r.left; oy = r.top;
+    });
+    window.addEventListener('pointermove', function(e){
+      if (!down || e.pointerId !== pid) return;
+      var dx = e.clientX - sx, dy = e.clientY - sy;
+      if (!moving && Math.abs(dx) + Math.abs(dy) < 6) return;
+      if (!moving){ moving = true; if (onPlace) onPlace(); el.classList.add('dragging'); try { handle.setPointerCapture(pid); } catch(err){} }
+      e.preventDefault();
+      place(el, ox + dx, oy + dy);
+    });
+    window.addEventListener('pointerup', function(e){
+      if (!down || e.pointerId !== pid) return;
+      down = false;
+      if (moving){ var r = el.getBoundingClientRect(); savePos(key, r.left, r.top); el.classList.remove('dragging'); el._dragged = Date.now(); }
+      moving = false;
+    });
+  }
+  draggable($('jv-head'), root, 'jsl_voice_pos', function(){ var r = root.getBoundingClientRect(); root.classList.add('placed'); place(root, r.left, r.top); });
+  draggable($('jv-bmic'), bubble, 'jsl_voice_bubble');
+  draggable($('jv-bgrip'), bubble, 'jsl_voice_bubble');
+  window.addEventListener('resize', function(){ if (open) clampAll(); });
+  $('jv-head').addEventListener('dblclick', function(e){ if (e.target.closest('button')) return; try { localStorage.removeItem('jsl_voice_pos'); } catch(err){} root.classList.remove('placed'); root.style.left = root.style.top = root.style.bottom = ''; });
+  $('jv-min').addEventListener('click', minimize);
+  $('jv-bexp').addEventListener('click', expand);
+  $('jv-bopen').addEventListener('click', expand);
+  $('jv-byes').addEventListener('click', function(){ confirmCard(); });
+  $('jv-bmic').addEventListener('click', function(){ if (bubble._dragged && Date.now() - bubble._dragged < 300) return; toggleLive(); });
   if (navBtn) navBtn.addEventListener('click', function(){ if (open) hide(); else { show(); startLive(); } });
   $('jv-close').addEventListener('click', hide);
   $('jv-mic').addEventListener('click', toggleLive);

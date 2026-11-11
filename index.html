@@ -2829,6 +2829,10 @@ html.jsl-locked, html.jsl-locked body{ overflow:hidden !important; }
     <span class="nav-badge" id="nb-vendors">—</span>
   </div>
   <div class="nav-data-menu">
+    <button class="nav-data-btn jv-nav-btn" id="jv-open" type="button" title="Voice assistant — hold Space to talk" aria-label="Voice assistant">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0014 0v-1"/><path d="M12 18v4"/></svg>
+      Voice <kbd>Space</kbd>
+    </button>
     <button class="fx-nav-btn" id="fx-toggle" type="button" aria-pressed="true" title="Motion & 3D effects">
       <span class="fx-toggle-pip" aria-hidden="true"></span>
       <span id="fx-toggle-lbl">Effects</span>
@@ -2897,7 +2901,7 @@ html.jsl-locked, html.jsl-locked body{ overflow:hidden !important; }
           </div>
           <div>
             <div style="font-size:13px;font-weight:700;color:#1e293b;">AI Auto-fill API Key</div>
-            <div style="font-size:11px;color:#94a3b8;" id="ai-key-status">Not configured — Paste &amp; Auto-fill is disabled</div>
+            <div style="font-size:11px;color:#94a3b8;" id="ai-key-status">✓ Using the Hub's built-in AI key — nothing to set up</div>
           </div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
@@ -2905,7 +2909,7 @@ html.jsl-locked, html.jsl-locked body{ overflow:hidden !important; }
           <button onclick="saveApiKey()" style="padding:8px 14px;background:#6d28d9;color:#fff;border:none;border-radius:7px;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:inherit;">Save Key</button>
           <button onclick="clearApiKey()" style="padding:8px 10px;background:#f1f5f9;color:#64748b;border:1px solid #e5e7eb;border-radius:7px;font-size:12.5px;cursor:pointer;font-family:inherit;" title="Remove saved key">✕</button>
         </div>
-        <div style="font-size:11px;color:#94a3b8;margin-top:6px;line-height:1.45;">Get a free key at <strong style="color:#6d28d9;">console.groq.com</strong> → API Keys. Stored only in your browser, never exported.</div>
+        <div style="font-size:11px;color:#94a3b8;margin-top:6px;line-height:1.45;">Optional. Yaki, Auto-fill and Voice use the Hub's built-in key. Add your own free key from <strong style="color:#6d28d9;">console.groq.com</strong> only as a personal fallback; it stays in your browser.</div>
       </div>
     </div>
   </div>
@@ -7969,7 +7973,11 @@ document.addEventListener('keydown', e => {
 const AI_KEY_STORAGE = 'jsl_ai_api_key';
 let _aiExtracted = null, _aiImageB64 = null, _aiMimeType = 'image/png';
 
-function loadApiKey(){ return localStorage.getItem(AI_KEY_STORAGE)||''; }
+// The Hub's own AI key lives in Supabase (voice-assistant edge function), so nobody has to paste one.
+// 'gsk_server' is only a marker meaning "use the Hub's key"; a personal key saved here is used first.
+const AI_SERVER_KEY = 'gsk_server';
+function _storedApiKey(){ try{ return localStorage.getItem(AI_KEY_STORAGE)||''; }catch(e){ return ''; } }
+function loadApiKey(){ return _storedApiKey()||AI_SERVER_KEY; }
 
 function saveApiKey(){
   const input=document.getElementById('ai-api-key-input');
@@ -7984,7 +7992,7 @@ function saveApiKey(){
 }
 
 function clearApiKey(){
-  if(!loadApiKey()){showToast('No API key saved','info');return;}
+  if(!_storedApiKey()){showToast('No personal API key saved','info');return;}
   if(!confirm('Remove the saved API key?'))return;
   localStorage.removeItem(AI_KEY_STORAGE);
   _updateApiKeyStatus();
@@ -7993,9 +8001,9 @@ function clearApiKey(){
 
 function _updateApiKeyStatus(){
   const el=document.getElementById('ai-key-status');if(!el)return;
-  const key=loadApiKey();
-  if(key){el.textContent='✓ Configured: '+key.slice(0,12)+'••••••••'+key.slice(-4);el.style.color='#15803d';}
-  else{el.textContent='Not configured — Paste & Auto-fill is disabled';el.style.color='#94a3b8';}
+  const key=_storedApiKey();
+  if(key){el.textContent='✓ Using your own key: '+key.slice(0,12)+'••••••••'+key.slice(-4);el.style.color='#15803d';}
+  else{el.textContent='✓ Using the Hub\'s built-in AI key — nothing to set up';el.style.color='#15803d';}
 }
 
 function openDataMenu(){
@@ -11568,7 +11576,7 @@ CRITICAL OUTPUT RULES — answers must be clean, scannable and ACTION-READY:
       addMsg(reply,'bot');
     }catch(e){
       typing.remove();
-      if(e&&(e.status===401||e.status===403)){addMsg('⚠️ Invalid API key. Check your key in the <b>Data</b> menu.','bot');return;}
+      if(e&&(e.status===401||e.status===403)){addMsg(/session expired/i.test(e.message||'')?'⚠️ Your session expired. Reload the page and sign in again.':'⚠️ Invalid API key. Check your key in the <b>Data</b> menu.','bot');return;}
       if(e&&e.status===413){addMsg('⚠️ That question is too large for the free AI plan. Try a shorter question, or wait a minute and ask again.','bot');return;}
       if(e&&e.status===429){addMsg('⏳ Too many requests. Wait '+(e.retryAfter?e.retryAfter+' seconds':'a minute')+' and try again.','bot');return;}
       if(e&&e.status){addMsg('⚠️ Error '+e.status+'. Please try again in a moment.','bot');return;}
@@ -14109,6 +14117,17 @@ html.fx-off #yk-char .yk-steam path{ opacity:.35; }
 (function(){
   'use strict';
   var GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+  // 'gsk_server' = the Hub's own key, kept in Supabase: the same request goes through the voice-assistant function
+  var SERVER_KEY = 'gsk_server', SERVER_URL = 'https://eaexvxwynzgondwycfap.supabase.co/functions/v1/voice-assistant';
+  var SESSION_MSG = 'Your session expired — reload the page and sign in again';
+  async function send(req, apiKey){
+    if (apiKey !== SERVER_KEY)
+      return fetch(GROQ_URL, { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + apiKey }, body:JSON.stringify(req) });
+    var tok = null;
+    try { tok = typeof window._jslAccessToken === 'function' ? await window._jslAccessToken() : null; } catch(e){}
+    if (!tok) throw fail(401, SESSION_MSG);
+    return fetch(SERVER_URL, { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + tok }, body:JSON.stringify({ action:'chat', body:req }) });
+  }
   // preference order. Every model has its OWN 8,000 tokens-a-minute allowance
   // on the free plan, so when one is used up the next one answers.
   var GROQ_TEXT   = ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'openai/gpt-oss-20b'];
@@ -14186,8 +14205,8 @@ html.fx-off #yk-char .yk-steam path{ opacity:.35; }
       if (!json) delete req.response_format;
       var resp;
       try {
-        resp = await fetch(GROQ_URL, { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + apiKey }, body:JSON.stringify(req) });
-      } catch(e){ throw fail(0, 'Connection error — check your internet and try again'); }
+        resp = await send(req, apiKey);
+      } catch(e){ if (e && e.status) throw e; throw fail(0, 'Connection error — check your internet and try again'); }
       if (resp.ok){
         var data = await resp.json(), u = data && data.usage;
         note(model, (u && u.total_tokens) || need);
@@ -14197,6 +14216,10 @@ html.fx-off #yk-char .yk-steam path{ opacity:.35; }
         return typeof c === 'string' ? c : '';
       }
       last = await httpError(resp, 'groq');
+      if (last.status === 401 || last.status === 403){
+        if (apiKey !== SERVER_KEY){ apiKey = SERVER_KEY; continue; }   // personal key rejected or deleted → the Hub's key
+        throw fail(401, SESSION_MSG);
+      }
       if (last.jsonFail && json){ json = false; continue; }       // the model could not keep strict JSON → ask again without JSON mode
       if (last.modelGone){ gone[model] = true; continue; }        // retired / not on this key → next model
       if (last.status === 429){ cool[model] = Date.now() + ((last.retryAfter || 20) + 1) * 1000; continue; }   // this model's minute is used up → another model, or wait
@@ -15957,6 +15980,362 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
       render();
     });
   });
+})();
+</script>
+<!-- ═══ JSL VOICE ASSISTANT ═══ hold Space (or tap the mic) and say what you need, in English or Spanish.
+     Speech → voice-assistant edge function (Whisper + tool-calling model, server-side key) → the same Hub
+     tools Claude uses. Reads answer straight away; every change waits on a confirmation card.
+     Never part of exports or prints. -->
+<style id="jsl-voice-css">
+#jv-root{ position:fixed; left:50%; bottom:74px; transform:translate(-50%,16px); width:min(580px,calc(100vw - 24px)); z-index:9994;
+  font-family:'Inter','Aptos','Segoe UI',system-ui,sans-serif; opacity:0; pointer-events:none; transition:opacity .22s ease, transform .22s cubic-bezier(.2,.8,.2,1); }
+#jv-root.on{ opacity:1; pointer-events:auto; transform:translate(-50%,0); }
+#jv-card{ background:rgba(255,255,255,.97); border:1px solid #ecdcdc; border-radius:20px; overflow:hidden;
+  box-shadow:0 1px 0 #fff inset, 0 30px 60px -22px rgba(69,10,10,.45), 0 10px 24px -14px rgba(15,23,42,.28); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); }
+#jv-head{ display:flex; align-items:center; gap:10px; padding:12px 14px 10px 18px; border-bottom:1px solid #f4e9e9; }
+#jv-dot{ width:8px; height:8px; border-radius:50%; background:#94a3b8; flex:none; transition:background .2s; }
+#jv-root[data-state="rec"] #jv-dot{ background:#dc2626; box-shadow:0 0 0 4px rgba(220,38,38,.16); }
+#jv-root[data-state="busy"] #jv-dot{ background:#d97706; }
+#jv-root[data-state="idle"] #jv-dot{ background:#16a34a; }
+#jv-status{ font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#7f1d1d; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.jv-ib{ width:30px; height:30px; display:grid; place-items:center; border:1px solid transparent; background:none; border-radius:9px; color:#64748b; cursor:pointer; flex:none; }
+.jv-ib:hover{ background:#fef2f2; color:#9b1c1c; }
+.jv-ib[aria-pressed="true"]{ background:#fef2f2; color:#9b1c1c; border-color:#f3d6d6; }
+.jv-ib svg{ width:16px; height:16px; }
+#jv-log{ max-height:min(300px,38vh); overflow-y:auto; padding:12px 18px 2px; display:flex; flex-direction:column; gap:8px; overscroll-behavior:contain; }
+#jv-log:empty{ display:none; }
+.jv-m{ font-size:14px; line-height:1.5; max-width:92%; white-space:pre-wrap; overflow-wrap:anywhere; }
+.jv-m.u{ align-self:flex-end; background:#f8f1f1; color:#450a0a; padding:7px 12px; border-radius:14px 14px 4px 14px; }
+.jv-m.a{ align-self:flex-start; color:#1e293b; padding:2px 0; }
+.jv-m.ok{ align-self:flex-start; color:#166534; font-weight:600; }
+.jv-m.err{ align-self:flex-start; color:#b91c1c; font-weight:600; }
+.jv-m.hint{ align-self:center; color:#94a3b8; font-size:12.5px; }
+#jv-confirm{ margin:10px 14px 2px; border:1px solid #f0d9d9; border-radius:14px; background:linear-gradient(180deg,#fffdfd,#fff7f7); overflow:hidden; }
+#jv-confirm[hidden]{ display:none; }
+#jv-c-top{ padding:12px 14px 8px; }
+#jv-c-title{ font-size:10.5px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; color:#b91c1c; }
+#jv-c-head{ font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif; font-size:26px; font-weight:800; letter-spacing:.01em; color:#1e293b; margin-top:2px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+#jv-c-fields{ display:grid; grid-template-columns:max-content 1fr; gap:5px 14px; padding:2px 14px 10px; font-size:13px; max-height:170px; overflow-y:auto; }
+#jv-c-fields dt{ color:#94a3b8; font-weight:600; }
+#jv-c-fields dd{ margin:0; color:#1e293b; font-weight:600; overflow-wrap:anywhere; }
+#jv-c-warn{ margin:0 14px 10px; padding:7px 10px; border-radius:9px; background:#fffbeb; border:1px solid #fde68a; color:#92400e; font-size:12.5px; font-weight:600; }
+#jv-c-warn:empty{ display:none; }
+#jv-c-act{ display:flex; align-items:center; gap:8px; padding:10px 14px; border-top:1px solid #f4e3e3; background:#fff; }
+#jv-c-act span{ flex:1; font-size:11.5px; color:#94a3b8; line-height:1.35; }
+.jv-btn{ font-family:inherit; font-size:13px; font-weight:700; border-radius:10px; padding:9px 16px; cursor:pointer; border:1px solid #e5e7eb; background:#fff; color:#475569; }
+.jv-btn:hover{ border-color:#cbd5e1; color:#1e293b; }
+.jv-btn.go{ border:none; color:#fff; background:linear-gradient(180deg,#c0392b,#9b1c1c); box-shadow:0 8px 16px -8px rgba(155,28,28,.7); }
+.jv-btn.go:hover{ filter:brightness(1.07); color:#fff; }
+.jv-btn:disabled{ opacity:.55; cursor:default; }
+#jv-bar{ display:flex; align-items:center; gap:10px; padding:12px 14px 14px; }
+#jv-mic{ position:relative; width:52px; height:52px; border-radius:50%; border:none; cursor:pointer; flex:none; color:#fff;
+  background:linear-gradient(180deg,#c0392b,#9b1c1c); box-shadow:0 10px 20px -8px rgba(155,28,28,.75), 0 1px 0 rgba(255,255,255,.35) inset; display:grid; place-items:center; transition:transform .12s; }
+#jv-mic:hover{ transform:translateY(-1px); }
+#jv-mic svg{ width:22px; height:22px; position:relative; }
+#jv-mic::before{ content:''; position:absolute; inset:-5px; border-radius:50%; border:2px solid rgba(220,38,38,.55); opacity:0; transform:scale(var(--jv-lvl,1)); transition:transform .08s linear, opacity .15s; }
+#jv-root[data-state="rec"] #jv-mic::before{ opacity:1; }
+#jv-root[data-state="rec"] #jv-mic{ background:linear-gradient(180deg,#ef4444,#b91c1c); }
+#jv-root[data-state="busy"] #jv-mic{ opacity:.6; cursor:default; }
+#jv-wave{ flex:1; height:40px; min-width:0; display:none; }
+#jv-root[data-state="rec"] #jv-wave{ display:block; }
+#jv-root[data-state="rec"] #jv-text, #jv-root[data-state="rec"] #jv-send{ display:none; }
+#jv-text{ flex:1; min-width:0; font-family:inherit; font-size:14px; color:#1e293b; padding:11px 14px; border:1.5px solid #ecdcdc; border-radius:12px; background:#fff; outline:none; }
+#jv-text:focus{ border-color:#c0392b; box-shadow:0 0 0 3px rgba(192,57,43,.12); }
+#jv-text::placeholder{ color:#a8a29e; }
+#jv-dots{ display:none; gap:4px; align-items:center; }
+#jv-root[data-state="busy"] #jv-dots{ display:inline-flex; }
+#jv-dots i{ width:5px; height:5px; border-radius:50%; background:#d97706; animation:jvDot 1s infinite ease-in-out; }
+#jv-dots i:nth-child(2){ animation-delay:.15s; } #jv-dots i:nth-child(3){ animation-delay:.3s; }
+@keyframes jvDot{ 0%,80%,100%{ transform:translateY(0); opacity:.45; } 40%{ transform:translateY(-4px); opacity:1; } }
+.jv-nav-btn{ gap:7px; }
+.jv-nav-btn kbd{ font-family:inherit; font-size:10px; font-weight:700; color:#94a3b8; border:1px solid #e2e8f0; border-radius:5px; padding:1px 5px; background:#fff; }
+.jv-nav-btn.live{ color:#b91c1c; }
+@media (max-width:900px){ .jv-nav-btn kbd{ display:none; } }
+@media (max-width:600px){ #jv-root{ bottom:14px; } #jv-c-head{ font-size:22px; } }
+@media (prefers-reduced-motion:reduce){ #jv-root{ transition:none; } #jv-dots i{ animation:none; } #jv-mic::before{ transition:none; } }
+@media print{ #jv-root, .jv-nav-btn{ display:none !important; } }
+</style>
+
+<div id="jv-root" data-state="idle" data-html2canvas-ignore="true" role="dialog" aria-label="Voice assistant" aria-hidden="true">
+  <div id="jv-card">
+    <div id="jv-head">
+      <span id="jv-dot" aria-hidden="true"></span>
+      <span id="jv-status" role="status" aria-live="polite">Ready</span>
+      <span id="jv-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+      <button class="jv-ib" id="jv-speak" type="button" aria-pressed="false" title="Read answers aloud" aria-label="Read answers aloud">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 010 7"/><path d="M18.4 5.6a9 9 0 010 12.8"/></svg>
+      </button>
+      <button class="jv-ib" id="jv-close" type="button" title="Close (Esc)" aria-label="Close voice assistant">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div id="jv-log" aria-live="polite"></div>
+    <div id="jv-confirm" hidden>
+      <div id="jv-c-top"><div id="jv-c-title"></div><div id="jv-c-head"></div></div>
+      <dl id="jv-c-fields"></dl>
+      <div id="jv-c-warn"></div>
+      <div id="jv-c-act">
+        <span>Nothing is saved until you confirm. Say “confirmo”, “cancela”, or what to change.</span>
+        <button class="jv-btn" id="jv-c-no" type="button">Cancel</button>
+        <button class="jv-btn go" id="jv-c-yes" type="button">Confirm</button>
+      </div>
+    </div>
+    <div id="jv-bar">
+      <button id="jv-mic" type="button" title="Tap to talk — or hold Space" aria-label="Start or stop recording">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0014 0v-1"/><path d="M12 18v4"/></svg>
+      </button>
+      <canvas id="jv-wave" aria-hidden="true"></canvas>
+      <input id="jv-text" type="text" autocomplete="off" maxlength="600" placeholder="Hold Space and talk — or type here" aria-label="Type a command">
+      <button class="jv-btn" id="jv-send" type="button">Send</button>
+    </div>
+  </div>
+</div>
+
+<script id="jsl-voice-js">
+(function(){
+  'use strict';
+  var FN = 'https://eaexvxwynzgondwycfap.supabase.co/functions/v1/voice-assistant';
+  var MIN_MS = 450, MAX_MS = 60000, QUIET = 0.012, IDLE_RELEASE_MS = 45000;
+  var $ = function(id){ return document.getElementById(id); };
+  var root = $('jv-root'), log = $('jv-log'), statusEl = $('jv-status'), navBtn = $('jv-open');
+  if (!root) return;
+  var open = false, state = 'idle', history = [], pending = null, speak = false, pinged = false;
+  var stream = null, rec = null, chunks = [], ac = null, analyser = null, buf = null, raf = 0, startedAt = 0, peak = 0;
+  var starting = false, stopWanted = false, spaceHeld = false, maxTimer = 0, releaseTimer = 0, ctl = null;
+  try { speak = localStorage.getItem('jsl_voice_speak') === '1'; } catch(e){}
+  $('jv-speak').setAttribute('aria-pressed', speak ? 'true' : 'false');
+
+  function setState(s, label){
+    state = s; root.setAttribute('data-state', s);
+    statusEl.textContent = label || (s === 'rec' ? 'Listening — release to send' : s === 'busy' ? 'Working' : pending ? 'Waiting for your confirmation' : 'Ready — hold Space or tap the mic');
+    if (navBtn) navBtn.classList.toggle('live', s === 'rec');
+  }
+  function msg(text, cls){
+    var d = document.createElement('div'); d.className = 'jv-m ' + cls; d.textContent = text;   // textContent only: transcripts and AI text are never parsed as HTML
+    log.appendChild(d);
+    while (log.children.length > 14) log.removeChild(log.firstChild);
+    log.scrollTop = log.scrollHeight;
+    return d;
+  }
+  function remember(role, text){ if (!text) return; history.push({ role:role, text:String(text).slice(0, 800) }); if (history.length > 8) history = history.slice(-8); }
+  function today(){ var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  async function token(){ try { return typeof window._jslAccessToken === 'function' ? await window._jslAccessToken() : null; } catch(e){ return null; } }
+
+  /* ── confirmation card ── */
+  function showCard(card){
+    pending = { tool:card.tool, args:card.args };
+    $('jv-c-title').textContent = card.title || 'Confirm change';
+    $('jv-c-head').textContent = card.headline || '';
+    $('jv-c-head').style.display = card.headline ? '' : 'none';
+    var dl = $('jv-c-fields'); dl.textContent = '';
+    (card.fields || []).forEach(function(f){
+      var dt = document.createElement('dt'), dd = document.createElement('dd');
+      dt.textContent = f.label; dd.textContent = f.value; dl.appendChild(dt); dl.appendChild(dd);
+    });
+    $('jv-c-warn').textContent = card.warn || '';
+    $('jv-confirm').hidden = false;
+    $('jv-c-yes').disabled = false; $('jv-c-no').disabled = false;
+  }
+  function hideCard(){ pending = null; $('jv-confirm').hidden = true; }
+
+  /* ── talking to the edge function ── */
+  async function call(body, isForm){
+    var tok = await token();
+    if (!tok) throw new Error('Your session expired — reload the page and sign in again.');
+    ctl = new AbortController();
+    var timer = setTimeout(function(){ try { ctl.abort(); } catch(e){} }, 60000);
+    var res;
+    try {
+      res = await fetch(FN, { method:'POST', signal:ctl.signal,
+        headers: isForm ? { 'Authorization':'Bearer ' + tok } : { 'Authorization':'Bearer ' + tok, 'Content-Type':'application/json' },
+        body: isForm ? body : JSON.stringify(body) });
+    } catch(e){ throw new Error(e && e.name === 'AbortError' ? 'That took too long — try again.' : 'Connection problem — check your internet and try again.'); }
+    finally { clearTimeout(timer); }
+    var data = await res.json().catch(function(){ return {}; });
+    if (!res.ok) throw new Error(typeof data.error === 'string' ? data.error : (data.message || ('Voice assistant error ' + res.status)));
+    return data;
+  }
+  function say(text, language){
+    if (!speak || !text || !('speechSynthesis' in window)) return;
+    try {
+      window.speechSynthesis.cancel();
+      var u = new SpeechSynthesisUtterance(String(text).slice(0, 600));
+      var es = language ? /^(es|spa)/i.test(language) : /[áéíóúñ¿¡]|\b(el|la|los|las|que|con|para|del|está)\b/i.test(text);
+      u.lang = es ? 'es-US' : 'en-US'; u.rate = 1.05;
+      window.speechSynthesis.speak(u);
+    } catch(e){}
+  }
+  function handle(r){
+    if (r.transcript){ msg(r.transcript, 'u'); remember('user', r.transcript); }
+    if (r.type === 'empty'){ msg('I didn’t catch that — hold Space while you speak.', 'hint'); return; }
+    if (r.type === 'answer'){ msg(r.text, 'a'); remember('assistant', r.text); say(r.text, r.language); return; }
+    if (r.type === 'confirm'){
+      showCard(r.card);
+      if (r.text) msg(r.text, 'a');
+      remember('assistant', 'Proposed for confirmation: ' + (r.card.title || r.card.tool) + ' ' + (r.card.headline || ''));
+      say(/^(es|spa)/i.test(r.language || '') ? '¿Confirmo?' : 'Confirm?', r.language);
+      return;
+    }
+    if (r.type === 'cancelled'){ hideCard(); msg('Cancelled — nothing was saved.', 'hint'); remember('assistant', 'Cancelled.'); return; }
+    if (r.type === 'done'){
+      if (r.ok){
+        hideCard(); msg('✓ ' + r.text, 'ok'); remember('assistant', 'Done: ' + r.text);
+        say(/^(es|spa)/i.test(r.language || '') ? 'Listo, guardado.' : 'Done, saved.', r.language);
+        try { if (typeof _pullRemoteChanges === 'function') _pullRemoteChanges(); } catch(e){}   // show the change in this tab right away
+        try { if (typeof showToast === 'function') showToast('Saved by voice', 'success'); } catch(e){}
+      } else {
+        $('jv-c-yes').disabled = false; $('jv-c-no').disabled = false;
+        msg('Not saved — ' + r.text, 'err'); remember('assistant', 'Not saved: ' + r.text);
+      }
+      return;
+    }
+  }
+  async function run(fn){
+    if (state === 'busy') return;
+    setState('busy');
+    try { handle(await fn()); }
+    catch(e){ msg(e.message || 'Something went wrong — try again.', 'err'); $('jv-c-yes').disabled = false; $('jv-c-no').disabled = false; }
+    finally { ctl = null; setState('idle'); }
+  }
+  function sendText(){
+    var el = $('jv-text'), t = el.value.trim();
+    if (!t || state !== 'idle') return;
+    el.value = '';
+    run(function(){ return call({ action:'text', text:t, history:history, pending:pending, today:today() }); });
+  }
+  function sendAudio(blob, ext){
+    var fd = new FormData();
+    fd.append('audio', blob, 'speech.' + ext);
+    fd.append('history', JSON.stringify(history));
+    fd.append('pending', JSON.stringify(pending));
+    fd.append('today', today());
+    run(function(){ return call(fd, true); });
+  }
+  function confirmCard(){
+    if (!pending || state !== 'idle') return;
+    $('jv-c-yes').disabled = true; $('jv-c-no').disabled = true;
+    var p = pending;
+    run(function(){ return call({ action:'confirm', pending:p }); });
+  }
+
+  /* ── microphone ── */
+  function releaseMic(){
+    clearTimeout(releaseTimer);
+    if (stream){ try { stream.getTracks().forEach(function(t){ t.stop(); }); } catch(e){} stream = null; }
+    if (ac){ try { ac.close(); } catch(e){} ac = null; analyser = null; }
+  }
+  async function getMic(){
+    clearTimeout(releaseTimer);
+    if (stream && stream.active) return stream;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined')
+      throw new Error('This browser can’t record audio — use Chrome or Edge, or type your request.');
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true } }); }
+    catch(e){ throw new Error(e && (e.name === 'NotAllowedError' || e.name === 'SecurityError') ? 'Microphone is blocked — allow it from the lock icon in the address bar, then try again.' : 'No microphone found — plug one in or type your request.'); }
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      ac = new AC(); analyser = ac.createAnalyser(); analyser.fftSize = 256; buf = new Uint8Array(analyser.fftSize);
+      ac.createMediaStreamSource(stream).connect(analyser);
+    } catch(e){ analyser = null; }
+    return stream;
+  }
+  function draw(){
+    raf = requestAnimationFrame(draw);
+    var c = $('jv-wave'), w = c.clientWidth, h = c.clientHeight, dpr = window.devicePixelRatio || 1;
+    if (!w) return;
+    if (c.width !== Math.round(w * dpr)){ c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+    var g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+    var lvl = 0;
+    if (analyser){
+      analyser.getByteTimeDomainData(buf);
+      var bars = Math.max(12, Math.floor(w / 7)), step = Math.floor(buf.length / bars), sum = 0;
+      for (var i = 0; i < bars; i++){
+        var m = 0; for (var j = 0; j < step; j++){ var v = Math.abs(buf[i * step + j] - 128) / 128; if (v > m) m = v; }
+        sum += m; if (m > peak) peak = m;
+        var bh = Math.max(3, Math.min(h, m * h * 2.4));
+        g.fillStyle = 'rgba(185,28,28,' + (0.35 + Math.min(0.65, m * 3)) + ')';
+        g.fillRect(i * (w / bars) + 1.5, (h - bh) / 2, Math.max(2, w / bars - 3), bh);
+      }
+      lvl = sum / bars;
+    } else peak = 1;
+    $('jv-mic').style.setProperty('--jv-lvl', String(1 + Math.min(0.45, lvl * 3)));
+  }
+  async function startRec(){
+    if (state !== 'idle' || starting) return;
+    starting = true; stopWanted = false;
+    try { if ('speechSynthesis' in window) window.speechSynthesis.cancel(); } catch(e){}
+    try {
+      if (!(await token())) throw new Error('Sign in to the Hub first.');
+      var s = await getMic();
+      var type = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'].filter(function(t){ return MediaRecorder.isTypeSupported(t); })[0];
+      rec = type ? new MediaRecorder(s, { mimeType:type, audioBitsPerSecond:32000 }) : new MediaRecorder(s);
+      chunks = []; peak = 0;
+      rec.ondataavailable = function(e){ if (e.data && e.data.size) chunks.push(e.data); };
+      rec.onstop = function(){
+        cancelAnimationFrame(raf); clearTimeout(maxTimer);
+        var ms = Date.now() - startedAt, mime = rec.mimeType || type || 'audio/webm', cancelled = rec._cancelled;
+        rec = null; setState('idle');
+        releaseTimer = setTimeout(releaseMic, IDLE_RELEASE_MS);
+        if (cancelled) return;
+        if (ms < MIN_MS){ msg('Too short — hold Space (or tap the mic) while you speak.', 'hint'); return; }
+        if (peak < QUIET){ msg('I couldn’t hear anything — check your microphone.', 'hint'); return; }
+        var ext = /mp4/.test(mime) ? 'm4a' : /ogg/.test(mime) ? 'ogg' : 'webm';
+        sendAudio(new Blob(chunks, { type:mime }), ext);
+      };
+      rec.start(250); startedAt = Date.now(); setState('rec'); draw();
+      maxTimer = setTimeout(stopRec, MAX_MS);
+      if (stopWanted) stopRec();
+    } catch(e){ msg(e.message || 'Could not start the microphone.', 'err'); setState('idle'); }
+    finally { starting = false; }
+  }
+  function stopRec(cancel){
+    if (starting){ stopWanted = true; return; }
+    if (rec && rec.state !== 'inactive'){ rec._cancelled = !!cancel; try { rec.stop(); } catch(e){} }
+  }
+
+  /* ── open / close ── */
+  function show(){
+    if (open) return;
+    open = true; root.classList.add('on'); root.setAttribute('aria-hidden', 'false'); setState(state);
+    if (!log.children.length) msg('Try: “Nueva quote, PO 45821, vendor Ajinomoto, pickup mañana, para Pasadena”  ·  “Which loads are in transit?”', 'hint');
+    if (!pinged){ pinged = true; token().then(function(t){ if (t) fetch(FN, { method:'POST', headers:{ 'Authorization':'Bearer ' + t, 'Content-Type':'application/json' }, body:'{"action":"ping"}' }).catch(function(){}); }); }
+  }
+  function hide(){
+    if (!open) return;
+    stopRec(true); if (ctl){ try { ctl.abort(); } catch(e){} }
+    try { if ('speechSynthesis' in window) window.speechSynthesis.cancel(); } catch(e){}
+    open = false; root.classList.remove('on'); root.setAttribute('aria-hidden', 'true'); releaseMic();
+  }
+  if (navBtn) navBtn.addEventListener('click', function(){ if (open) hide(); else { show(); setTimeout(function(){ try { $('jv-text').focus(); } catch(e){} }, 60); } });
+  $('jv-close').addEventListener('click', hide);
+  $('jv-mic').addEventListener('click', function(){ if (state === 'rec') stopRec(); else if (state === 'idle') startRec(); });
+  $('jv-send').addEventListener('click', sendText);
+  $('jv-text').addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); sendText(); } });
+  $('jv-c-yes').addEventListener('click', confirmCard);
+  $('jv-c-no').addEventListener('click', function(){ if (state !== 'idle') return; hideCard(); msg('Cancelled — nothing was saved.', 'hint'); remember('assistant', 'Cancelled.'); setState('idle'); });
+  $('jv-speak').addEventListener('click', function(){
+    speak = !speak; this.setAttribute('aria-pressed', speak ? 'true' : 'false');
+    try { localStorage.setItem('jsl_voice_speak', speak ? '1' : '0'); } catch(e){}
+    if (!speak){ try { window.speechSynthesis.cancel(); } catch(e){} }
+  });
+
+  // hold Space = push-to-talk, anywhere in the Hub except while typing or on a control
+  function typing(t){
+    if (!t || t === document.body || t === document.documentElement) return false;
+    if (t.isContentEditable) return true;
+    return !!(t.closest && t.closest('input,textarea,select,button,a[href],summary,[role="button"],[role="textbox"],[contenteditable="true"]'));
+  }
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && open){ if (state === 'rec') stopRec(true); else hide(); return; }
+    if (e.code !== 'Space' || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+    if (document.documentElement.classList.contains('jsl-locked')) return;   // not signed in
+    if (spaceHeld){ e.preventDefault(); return; }
+    if (e.repeat || typing(e.target)) return;
+    e.preventDefault(); spaceHeld = true; show(); startRec();
+  });
+  document.addEventListener('keyup', function(e){ if (e.code === 'Space' && spaceHeld){ spaceHeld = false; e.preventDefault(); stopRec(); } });
+  window.addEventListener('blur', function(){ if (spaceHeld){ spaceHeld = false; stopRec(); } });
+  window.addEventListener('pagehide', releaseMic);
+  window.jslVoice = { open:show, close:hide };
 })();
 </script>
 </body>

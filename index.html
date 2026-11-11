@@ -16012,6 +16012,9 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
 .jv-m.ok{ align-self:flex-start; color:#166534; font-weight:600; }
 .jv-m.err{ align-self:flex-start; color:#b91c1c; font-weight:600; }
 .jv-m.hint{ align-self:center; color:#94a3b8; font-size:12.5px; }
+.jv-files{ align-self:flex-start; display:flex; flex-wrap:wrap; gap:6px; }
+.jv-files a{ font-size:12.5px; font-weight:600; color:#9b1c1c; background:#fef2f2; border:1px solid #f3d6d6; border-radius:8px; padding:4px 9px; text-decoration:none; overflow-wrap:anywhere; }
+.jv-files a:hover{ background:#fee2e2; }
 #jv-confirm{ margin:10px 14px 2px; border:1px solid #f0d9d9; border-radius:14px; background:linear-gradient(180deg,#fffdfd,#fff7f7); overflow:hidden; }
 #jv-confirm[hidden]{ display:none; }
 #jv-c-top{ padding:12px 14px 8px; }
@@ -16106,11 +16109,11 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
   'use strict';
   var FN = 'https://eaexvxwynzgondwycfap.supabase.co/functions/v1/voice-assistant';
   // hands-free listening: a sentence is sent when you pause for END_SILENCE_MS
-  var END_SILENCE_MS = 950, START_MS = 110, BARGE_MS = 240, MIN_VOICED_MS = 280, MAX_UTTER_MS = 45000, PREROLL_MS = 380, IDLE_OFF_MS = 75000, FLOOR = 0.011;
+  var END_SILENCE_MS = 1250, START_MS = 130, BARGE_MS = 380, MIN_VOICED_MS = 450, MAX_UTTER_MS = 45000, PREROLL_MS = 380, IDLE_OFF_MS = 75000, FLOOR = 0.011;
   var $ = function(id){ return document.getElementById(id); };
   var root = $('jv-root'), log = $('jv-log'), statusEl = $('jv-status'), navBtn = $('jv-open');
   if (!root) return;
-  var open = false, live = false, phase = 'idle', history = [], pending = null, card = null, lastTools = [], lastLang = '', speak = true, pinged = false, lastSaved = null, queued = null;
+  var open = false, live = false, phase = 'idle', history = [], pending = null, card = null, lastTools = [], lastLang = '', speak = true, pinged = false, lastSaved = null, queued = null, printAfter = false, saying = '', echoText = '';
   var stream = null, ac = null, node = null, srcNode = null, sink = null, sr = 48000;
   var pre = [], utter = [], hot = 0, quiet = 0, voiced = 0, utterMs = 0, uPeak = 0, echo = 0, spokeMs = 0, hotPeak = 0, stopSpeech = null, noise = 0.004, lastSpeechAt = 0, levels = [], raf = 0, ctl = null, starting = false, speakTimer = 0;
   try { speak = localStorage.getItem('jsl_voice_speak') !== '0'; } catch(e){}
@@ -16175,6 +16178,7 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
     $('jv-c-yes').disabled = false; $('jv-c-no').disabled = false;
   }
   function hideCard(){ pending = null; card = null; $('jv-confirm').hidden = true; }
+  function dropCard(){ printAfter = false; hideCard(); }
   // the card as it stands now, hand edits included
   function cardArgs(){
     if (!pending) return null;
@@ -16229,7 +16233,7 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
       u.onend = finish; u.onerror = finish;
       // interrupting: silence it now and skip the usual "back to listening" step (the caller decides what happens next)
       stopSpeech = function(){ if (done) return; done = true; stopSpeech = null; clearTimeout(speakTimer); try { window.speechSynthesis.cancel(); } catch(e){} };
-      pre = []; hot = 0; echo = 0; spokeMs = 0; hotPeak = 0;
+      pre = []; hot = 0; echo = 0; spokeMs = 0; hotPeak = 0; saying = String(text);
       setPhase('speak');
       window.speechSynthesis.speak(u);
       speakTimer = setTimeout(finish, 3500 + String(text).length * 95);   // some browsers never fire onend
@@ -16242,11 +16246,12 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
     if (r.type === 'empty') return '';
     if (r.type === 'answer'){ msg(r.text, 'a'); remember('assistant', r.text); return r.text; }
     if (r.type === 'confirm'){
+      if (r.printAfter) printAfter = true;
       showCard(r.card);
       remember('assistant', 'Card shown: ' + (r.card.title || r.card.tool) + ' ' + (r.card.headline || '') + (r.card.missing && r.card.missing.length ? ' (missing: ' + r.card.missing.join(', ') + ')' : ''));
       return r.card.speech || r.text || '';
     }
-    if (r.type === 'cancelled'){ hideCard(); msg('Cancelled — nothing was saved.', 'hint'); remember('assistant', 'Cancelled.'); return r.speech || ''; }
+    if (r.type === 'cancelled'){ dropCard(); msg('Cancelled — nothing was saved.', 'hint'); remember('assistant', 'Cancelled.'); return r.speech || ''; }
     if (r.type === 'client'){
       if (r.text) msg(r.text, 'a');
       remember('assistant', r.text || 'Downloading documents.');
@@ -16256,6 +16261,8 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
     if (r.type === 'done'){
       if (r.ok){
         if (r.record) lastSaved = r.record;
+        if (printAfter && r.record && !r.then) queued = { name:'download', kind:r.record.kind, id:r.record.id, po:r.record.po, ref:r.record.ref };
+        printAfter = false;
         if (r.then && r.then.name === 'download') queued = r.then;
         hideCard(); msg('✓ ' + r.text, 'ok'); remember('assistant', 'Saved: ' + r.text);
         try { if (typeof _pullRemoteChanges === 'function') _pullRemoteChanges(); } catch(e){}   // show the change in this tab right away
@@ -16299,6 +16306,7 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
     fd.append('pending', JSON.stringify(cardArgs()));
     fd.append('tools', JSON.stringify(lastTools));
     fd.append('last', JSON.stringify(lastSaved));
+    if (echoText){ fd.append('echo', echoText.slice(0, 600)); echoText = ''; }
     fd.append('today', today());
     run(function(){ return call(fd, true); });
   }
@@ -16360,7 +16368,7 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
     if (!rec) throw new Error('I couldn’t find ' + (t.kind === 'transfer' ? 'transfer ' + (t.ref || '#' + t.id) : 'PO ' + (t.po || '#' + t.id)) + ' in the Hub to download it.');
     var activeTab = document.querySelector('.nav-tab.active'), isTr = t.kind === 'transfer';
     var snap = snapshot(isTr ? TR_FIELDS : SHIP_FIELDS, isTr ? TR_DATES : SHIP_DATES);
-    var seq = getNextDownloadNumber(), stamp = new Date().toISOString().slice(0, 10), file, el;
+    var seq = getNextDownloadNumber(), stamp = new Date().toISOString().slice(0, 10), file, el, got = [];
     try {
       if (isTr){
         switchTab('transfer', $('tab-transfer'));
@@ -16383,15 +16391,48 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
         file = ['JSL_Quote_Request', slug(rec.vendor), slug(rec.po), stamp].filter(Boolean).join('_').replace(/_+/g, '_') + '-' + seq + '.jpg';
       }
       await wait(120);
-      await captureElementAsJpeg(el, file, null);
-      exportDataNumbered(seq);
+      got = await watchDownloads(async function(){ await captureElementAsJpeg(el, file, null); exportDataNumbered(seq); }, function(list){
+        return list.some(function(x){ return /\.jpg$/i.test(x.name); }) && list.some(function(x){ return /\.json$/i.test(x.name); });
+      }, 12000);
     } finally {
       restore(snap);
       try { if (isTr) updateTransferPreview(); else updatePreview(); } catch(e){}
       if (activeTab && activeTab.id){ try { switchTab(activeTab.id.replace(/^tab-/, ''), activeTab); } catch(e){} }
     }
-    try { if (typeof showToast === 'function') showToast((isTr ? rec.ref : 'PO ' + (rec.po || '#' + rec.id)) + ' · document + Backup-' + seq + ' downloaded', 'success'); } catch(e){}
-    return file + ' + JSL_Freight_Backup-' + seq + '.json';
+    var img = got.filter(function(x){ return /\.jpg$/i.test(x.name); })[0], js = got.filter(function(x){ return /\.json$/i.test(x.name); })[0];
+    showFiles(got);
+    if (!img) throw new Error('The quote image could not be generated' + (js ? ' (the JSON backup was downloaded)' : '') + '. Try the Save & Download button, or say it again.');
+    try { if (typeof showToast === 'function') showToast((isTr ? rec.ref : 'PO ' + (rec.po || '#' + rec.id)) + ' · document + Backup-' + seq + ' ready', 'success'); } catch(e){}
+    return img.name + (js ? ' + ' + js.name : '') + '. If Chrome blocked them, click the links below.';
+  }
+  // Every file the Hub's own code downloads goes through <a download>.click(). While a job runs, those clicks
+  // are recorded (they still happen normally) and their blob links are kept alive, so the panel can offer them
+  // as links: clicking a link is a real user click, which Chrome never blocks.
+  async function watchDownloads(job, complete, timeout){
+    var list = [], keep = {}, A = HTMLAnchorElement.prototype, origClick = A.click, origRevoke = URL.revokeObjectURL;
+    A.click = function(){
+      try { if (this.hasAttribute('download') && /^blob:/.test(this.href)){ list.push({ name:this.getAttribute('download') || 'download', url:this.href }); keep[this.href] = 1; } } catch(e){}
+      return origClick.apply(this, arguments);
+    };
+    URL.revokeObjectURL = function(u){ if (keep[u]) return; return origRevoke.apply(URL, arguments); };
+    try {
+      await job();
+      var end = Date.now() + timeout;
+      while (!complete(list) && Date.now() < end) await wait(150);   // the image arrives a moment after the JSON
+    } finally {
+      A.click = origClick; URL.revokeObjectURL = origRevoke;
+      setTimeout(function(){ Object.keys(keep).forEach(function(u){ try { origRevoke.call(URL, u); } catch(e){} }); }, 20 * 60 * 1000);
+    }
+    return list;
+  }
+  function showFiles(list){
+    if (!list.length) return;
+    var d = document.createElement('div'); d.className = 'jv-m jv-files';
+    list.forEach(function(x){
+      var a = document.createElement('a'); a.href = x.url; a.download = x.name; a.textContent = (/\.jpg$/i.test(x.name) ? '🖼 ' : '🗂 ') + x.name;
+      d.appendChild(a);
+    });
+    log.appendChild(d); log.scrollTop = log.scrollHeight;
   }
 
   /* ── microphone: raw audio + voice detection, so nothing has to be held down ── */
@@ -16424,9 +16465,10 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
       pre.push(frame); while (pre.length * ms > PREROLL_MS + BARGE_MS) pre.shift();
       spokeMs += ms;
       if (spokeMs < 350){ echo = Math.max(echo, rms); return; }
-      if (rms > Math.max(thr * 2.2, echo * 1.7)){ hot += ms; hotPeak = Math.max(hotPeak, rms); }
+      if (rms > Math.max(thr * 2.6, echo * 2.1)){ hot += ms; hotPeak = Math.max(hotPeak, rms); }
       else { if (hot) echo = Math.max(echo, hotPeak * 0.9); hot = 0; hotPeak = 0; echo = Math.max(echo * 0.998, rms); }
       if (hot >= BARGE_MS && stopSpeech){
+        echoText = saying;
         stopSpeech();
         utter = pre.slice(); pre = []; voiced = hot; quiet = 0; uPeak = rms; utterMs = utter.length * ms; hot = 0; lastSpeechAt = Date.now();
         setPhase('rec');
@@ -16448,7 +16490,7 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
       var frames = utter, ok = voiced >= MIN_VOICED_MS;
       resetVad();
       if (!ok){ setPhase('listen'); return; }
-      var drop = Math.max(0, Math.floor((END_SILENCE_MS - 300) / ms));           // trim most of the closing pause
+      var drop = Math.max(0, Math.floor((END_SILENCE_MS - 350) / ms));           // trim most of the closing pause
       sendAudio(wav(frames.slice(0, Math.max(1, frames.length - drop))));
     }
   }
@@ -16527,7 +16569,7 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
   $('jv-text').addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); sendText(); } });
   $('jv-c-yes').addEventListener('click', confirmCard);
   $('jv-c-fields').addEventListener('keydown', function(e){ if (e.key === 'Enter' && e.target && e.target.tagName === 'INPUT'){ e.preventDefault(); confirmCard(); } });
-  $('jv-c-no').addEventListener('click', function(){ if (phase === 'busy') return; hideCard(); msg('Cancelled — nothing was saved.', 'hint'); remember('assistant', 'Cancelled.'); setPhase(phase); });
+  $('jv-c-no').addEventListener('click', function(){ if (phase === 'busy') return; dropCard(); msg('Cancelled — nothing was saved.', 'hint'); remember('assistant', 'Cancelled.'); setPhase(phase); });
   $('jv-speak').addEventListener('click', function(){
     speak = !speak; this.setAttribute('aria-pressed', speak ? 'true' : 'false');
     try { localStorage.setItem('jsl_voice_speak', speak ? '1' : '0'); } catch(e){}

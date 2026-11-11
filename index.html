@@ -16110,7 +16110,7 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
   var $ = function(id){ return document.getElementById(id); };
   var root = $('jv-root'), log = $('jv-log'), statusEl = $('jv-status'), navBtn = $('jv-open');
   if (!root) return;
-  var open = false, live = false, phase = 'idle', history = [], pending = null, card = null, lastTools = [], lastLang = '', speak = true, pinged = false;
+  var open = false, live = false, phase = 'idle', history = [], pending = null, card = null, lastTools = [], lastLang = '', speak = true, pinged = false, lastSaved = null, queued = null;
   var stream = null, ac = null, node = null, srcNode = null, sink = null, sr = 48000;
   var pre = [], utter = [], hot = 0, quiet = 0, voiced = 0, utterMs = 0, uPeak = 0, echo = 0, spokeMs = 0, hotPeak = 0, stopSpeech = null, noise = 0.004, lastSpeechAt = 0, levels = [], raf = 0, ctl = null, starting = false, speakTimer = 0;
   try { speak = localStorage.getItem('jsl_voice_speak') !== '0'; } catch(e){}
@@ -16247,8 +16247,16 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
       return r.card.speech || r.text || '';
     }
     if (r.type === 'cancelled'){ hideCard(); msg('Cancelled — nothing was saved.', 'hint'); remember('assistant', 'Cancelled.'); return r.speech || ''; }
+    if (r.type === 'client'){
+      if (r.text) msg(r.text, 'a');
+      remember('assistant', r.text || 'Downloading documents.');
+      if (r.action && r.action.name === 'download') queued = r.action;
+      return r.speech || '';
+    }
     if (r.type === 'done'){
       if (r.ok){
+        if (r.record) lastSaved = r.record;
+        if (r.then && r.then.name === 'download') queued = r.then;
         hideCard(); msg('✓ ' + r.text, 'ok'); remember('assistant', 'Saved: ' + r.text);
         try { if (typeof _pullRemoteChanges === 'function') _pullRemoteChanges(); } catch(e){}   // show the change in this tab right away
         try { if (typeof showToast === 'function') showToast('Saved by voice', 'success'); } catch(e){}
@@ -16266,16 +16274,23 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
     if (phase === 'busy') return;
     setPhase('busy');
     var spoken = '';
+    queued = null;
     try { spoken = handle(await fn()); }
     catch(e){ msg(e.message || 'Something went wrong — try again.', 'err'); $('jv-c-yes').disabled = false; $('jv-c-no').disabled = false; }
     finally { ctl = null; }
+    if (queued){
+      var job = queued; queued = null;
+      setPhase('busy', 'Preparing documents…');
+      try { msg('✓ Downloaded: ' + (await downloadRecord(job)), 'ok'); }
+      catch(e){ msg(e.message || 'Could not download the documents.', 'err'); spoken = isEs(spoken) ? 'No pude descargar los documentos.' : 'I couldn’t download the documents.'; }
+    }
     say(spoken, resume);
   }
   function sendText(){
     var el = $('jv-text'), t = el.value.trim();
     if (!t || phase === 'busy') return;
     el.value = '';
-    run(function(){ return call({ action:'text', text:t, history:history, pending:cardArgs(), tools:lastTools, today:today() }); });
+    run(function(){ return call({ action:'text', text:t, history:history, pending:cardArgs(), tools:lastTools, last:lastSaved, today:today() }); });
   }
   function sendAudio(blob){
     var fd = new FormData();
@@ -16283,6 +16298,7 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
     fd.append('history', JSON.stringify(history));
     fd.append('pending', JSON.stringify(cardArgs()));
     fd.append('tools', JSON.stringify(lastTools));
+    fd.append('last', JSON.stringify(lastSaved));
     fd.append('today', today());
     run(function(){ return call(fd, true); });
   }
@@ -16293,6 +16309,89 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
     $('jv-c-yes').disabled = true; $('jv-c-no').disabled = true;
     var p = cardArgs();
     run(function(){ return call({ action:'confirm', pending:p, language:lastLang }); });
+  }
+
+  /* ── print / download: the Hub's own Save & Download files for an existing record ──
+     The New Quote / Transfer form is filled with the record so the request document renders exactly as it
+     does by hand, captured with the Hub's captureElementAsJpeg, plus exportDataNumbered for the JSON.
+     Whatever was in the form before is put back afterwards; nothing is saved a second time. */
+  var SHIP_FIELDS = ['vendor-select','po-num','pu-address','delivery-location','ship-type','temp-req','pallets','weight','dims','notes'];
+  var SHIP_DATES = ['dp-pu-date','dp-del-date'];
+  var TR_FIELDS = ['tr-from','tr-to','tr-ref','tr-product','tr-type','tr-temp','tr-pallets','tr-weight','tr-dims','tr-notes'];
+  var TR_DATES = ['dp-tr-date','dp-tr-deldate'];
+  var wait = function(ms){ return new Promise(function(r){ setTimeout(r, ms); }); };
+  function slug(v){ return String(v || '').replace(/[^a-z0-9]+/gi, '_'); }
+  function findRecord(t){
+    var norm = function(x){ return String(x || '').trim().toLowerCase(); };
+    if (t.kind === 'transfer'){
+      var tl = typeof transfers !== 'undefined' ? transfers : [];
+      return tl.filter(function(x){ return (t.id && x.id === t.id) || (!t.id && t.ref && norm(x.ref) === norm(t.ref)); }).sort(function(a, b){ return b.id - a.id; })[0] || null;
+    }
+    var sl = typeof shipments !== 'undefined' ? shipments : [];
+    return sl.filter(function(x){ return (t.id && x.id === t.id) || (!t.id && t.po && norm(x.po) === norm(t.po)); }).sort(function(a, b){ return b.id - a.id; })[0] || null;
+  }
+  function snapshot(ids, dates){
+    var s = { v:{}, d:{} };
+    ids.forEach(function(id){ var el = $(id); if (el) s.v[id] = el.value; });
+    dates.forEach(function(id){ s.d[id] = typeof dpGet === 'function' ? dpGet(id) : ''; });
+    return s;
+  }
+  function setField(id, val){
+    var el = $(id); if (!el) return;
+    val = val == null ? '' : String(val);
+    if (el.tagName === 'SELECT' && val && !Array.prototype.some.call(el.options, function(o){ return o.value === val; })){
+      var op = document.createElement('option'); op.value = val; op.textContent = val; op.setAttribute('data-jv-temp', '1'); el.appendChild(op);
+    }
+    el.value = val;
+  }
+  function restore(s){
+    Object.keys(s.v).forEach(function(id){ var el = $(id); if (el) el.value = s.v[id]; });
+    Object.keys(s.d).forEach(function(id){ if (typeof dpSet === 'function') dpSet(id, s.d[id]); });
+    Array.prototype.forEach.call(document.querySelectorAll('option[data-jv-temp]'), function(o){ o.remove(); });
+  }
+  async function downloadRecord(t){
+    if (typeof captureElementAsJpeg !== 'function' || typeof exportDataNumbered !== 'function') throw new Error('The Hub’s download tools are not available — reload the page.');
+    var rec = findRecord(t);
+    for (var i = 0; !rec && i < 3; i++){                       // a record saved a moment ago may not be in this tab yet
+      try { if (typeof _pullRemoteChanges === 'function') await _pullRemoteChanges(); } catch(e){}
+      rec = findRecord(t);
+      if (!rec) await wait(700);
+    }
+    if (!rec) throw new Error('I couldn’t find ' + (t.kind === 'transfer' ? 'transfer ' + (t.ref || '#' + t.id) : 'PO ' + (t.po || '#' + t.id)) + ' in the Hub to download it.');
+    var activeTab = document.querySelector('.nav-tab.active'), isTr = t.kind === 'transfer';
+    var snap = snapshot(isTr ? TR_FIELDS : SHIP_FIELDS, isTr ? TR_DATES : SHIP_DATES);
+    var seq = getNextDownloadNumber(), stamp = new Date().toISOString().slice(0, 10), file, el;
+    try {
+      if (isTr){
+        switchTab('transfer', $('tab-transfer'));
+        setField('tr-from', rec.from); setField('tr-to', rec.to); setField('tr-ref', rec.ref); setField('tr-product', rec.product);
+        setField('tr-type', rec.type || 'LTL'); setField('tr-temp', rec.temp || 'N/A'); setField('tr-pallets', rec.pallets || 1);
+        setField('tr-weight', rec.weight || ''); setField('tr-dims', rec.dims); setField('tr-notes', rec.notes);
+        dpSet('dp-tr-date', rec.puDate || ''); dpSet('dp-tr-deldate', rec.delDate || '');
+        try { onTransferPlantChange('from'); onTransferPlantChange('to'); } catch(e){}
+        updateTransferPreview();
+        el = document.querySelector('.quote-preview-bar.qpb-transfer');
+        file = 'JSL_Transfer_Request_' + slug(String(rec.from || '').replace(' Plant', '')) + '_to_' + slug(String(rec.to || '').replace(' Plant', '')) + '_' + slug(rec.ref) + '_' + stamp + '-' + seq + '.jpg';
+      } else {
+        switchTab('new-quote', $('tab-new-quote'));
+        setField('vendor-select', rec.vendor); setField('po-num', rec.po); setField('pu-address', rec.puAddr);
+        setField('delivery-location', rec.delLoc); setField('ship-type', rec.type || 'LTL'); setField('temp-req', rec.temp || 'N/A');
+        setField('pallets', rec.pallets || 1); setField('weight', rec.weight || ''); setField('dims', rec.dims); setField('notes', rec.notes);
+        dpSet('dp-pu-date', rec.puDate || ''); dpSet('dp-del-date', rec.delDate || '');
+        updatePreview();
+        el = $('quote-preview-bar');
+        file = ['JSL_Quote_Request', slug(rec.vendor), slug(rec.po), stamp].filter(Boolean).join('_').replace(/_+/g, '_') + '-' + seq + '.jpg';
+      }
+      await wait(120);
+      await captureElementAsJpeg(el, file, null);
+      exportDataNumbered(seq);
+    } finally {
+      restore(snap);
+      try { if (isTr) updateTransferPreview(); else updatePreview(); } catch(e){}
+      if (activeTab && activeTab.id){ try { switchTab(activeTab.id.replace(/^tab-/, ''), activeTab); } catch(e){} }
+    }
+    try { if (typeof showToast === 'function') showToast((isTr ? rec.ref : 'PO ' + (rec.po || '#' + rec.id)) + ' · document + Backup-' + seq + ' downloaded', 'success'); } catch(e){}
+    return file + ' + JSL_Freight_Backup-' + seq + '.json';
   }
 
   /* ── microphone: raw audio + voice detection, so nothing has to be held down ── */

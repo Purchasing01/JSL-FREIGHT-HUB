@@ -16106,17 +16106,17 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
   'use strict';
   var FN = 'https://eaexvxwynzgondwycfap.supabase.co/functions/v1/voice-assistant';
   // hands-free listening: a sentence is sent when you pause for END_SILENCE_MS
-  var END_SILENCE_MS = 950, START_MS = 110, MIN_VOICED_MS = 280, MAX_UTTER_MS = 45000, PREROLL_MS = 380, IDLE_OFF_MS = 75000, FLOOR = 0.011;
+  var END_SILENCE_MS = 950, START_MS = 110, BARGE_MS = 240, MIN_VOICED_MS = 280, MAX_UTTER_MS = 45000, PREROLL_MS = 380, IDLE_OFF_MS = 75000, FLOOR = 0.011;
   var $ = function(id){ return document.getElementById(id); };
   var root = $('jv-root'), log = $('jv-log'), statusEl = $('jv-status'), navBtn = $('jv-open');
   if (!root) return;
   var open = false, live = false, phase = 'idle', history = [], pending = null, card = null, lastTools = [], lastLang = '', speak = true, pinged = false;
   var stream = null, ac = null, node = null, srcNode = null, sink = null, sr = 48000;
-  var pre = [], utter = [], hot = 0, quiet = 0, voiced = 0, utterMs = 0, uPeak = 0, noise = 0.004, lastSpeechAt = 0, levels = [], raf = 0, ctl = null, starting = false, speakTimer = 0;
+  var pre = [], utter = [], hot = 0, quiet = 0, voiced = 0, utterMs = 0, uPeak = 0, echo = 0, spokeMs = 0, hotPeak = 0, stopSpeech = null, noise = 0.004, lastSpeechAt = 0, levels = [], raf = 0, ctl = null, starting = false, speakTimer = 0;
   try { speak = localStorage.getItem('jsl_voice_speak') !== '0'; } catch(e){}
   $('jv-speak').setAttribute('aria-pressed', speak ? 'true' : 'false');
 
-  var LABEL = { idle:'Press Space and just talk', listen:'Listening — just talk', rec:'Listening…', busy:'Working', speak:'Speaking — Space to interrupt' };
+  var LABEL = { idle:'Press Space and just talk', listen:'Listening — just talk', rec:'Listening…', busy:'Working', speak:'Speaking — just talk to interrupt' };
   function setPhase(p, label){
     phase = p; root.setAttribute('data-state', p); root.classList.toggle('live', live);
     statusEl.textContent = label || (p === 'idle' && pending ? 'Waiting for your confirmation' : LABEL[p]);
@@ -16217,7 +16217,7 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
   // read aloud, then go back to listening (only during a live conversation)
   function say(text, then){
     clearTimeout(speakTimer);
-    var done = false, finish = function(){ if (done) return; done = true; clearTimeout(speakTimer); if (then) then(); };
+    var done = false, finish = function(){ if (done) return; done = true; stopSpeech = null; clearTimeout(speakTimer); if (then) then(); };
     if (!live || !speak || !text || !('speechSynthesis' in window)) return finish();
     try {
       window.speechSynthesis.cancel();
@@ -16227,6 +16227,9 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
       if (v) u.voice = v;
       u.lang = v ? v.lang : (lang === 'es' ? 'es-US' : 'en-US'); u.rate = 1.08;
       u.onend = finish; u.onerror = finish;
+      // interrupting: silence it now and skip the usual "back to listening" step (the caller decides what happens next)
+      stopSpeech = function(){ if (done) return; done = true; stopSpeech = null; clearTimeout(speakTimer); try { window.speechSynthesis.cancel(); } catch(e){} };
+      pre = []; hot = 0; echo = 0; spokeMs = 0; hotPeak = 0;
       setPhase('speak');
       window.speechSynthesis.speak(u);
       speakTimer = setTimeout(finish, 3500 + String(text).length * 95);   // some browsers never fire onend
@@ -16314,8 +16317,23 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
     for (var i = 0; i < input.length; i++) sum += input[i] * input[i];
     var rms = Math.sqrt(sum / input.length), ms = input.length / sr * 1000;
     levels.push(rms); if (levels.length > 90) levels.shift();
-    if (!live || (phase !== 'listen' && phase !== 'rec')) return;
+    if (!live || (phase !== 'listen' && phase !== 'rec' && phase !== 'speak')) return;
     var frame = new Float32Array(input), thr = Math.max(FLOOR, noise * 3);
+    if (phase === 'speak'){
+      // Talking over the assistant stops it. Its own voice reaches the mic too, so the user has to be clearly
+      // louder than what the mic has been picking up from the speakers (learned continuously in `echo`).
+      pre.push(frame); while (pre.length * ms > PREROLL_MS + BARGE_MS) pre.shift();
+      spokeMs += ms;
+      if (spokeMs < 350){ echo = Math.max(echo, rms); return; }
+      if (rms > Math.max(thr * 2.2, echo * 1.7)){ hot += ms; hotPeak = Math.max(hotPeak, rms); }
+      else { if (hot) echo = Math.max(echo, hotPeak * 0.9); hot = 0; hotPeak = 0; echo = Math.max(echo * 0.998, rms); }
+      if (hot >= BARGE_MS && stopSpeech){
+        stopSpeech();
+        utter = pre.slice(); pre = []; voiced = hot; quiet = 0; uPeak = rms; utterMs = utter.length * ms; hot = 0; lastSpeechAt = Date.now();
+        setPhase('rec');
+      }
+      return;
+    }
     if (phase === 'listen'){
       pre.push(frame); while (pre.length * ms > PREROLL_MS) pre.shift();
       if (rms > thr){ hot += ms; noise = noise * 0.996 + rms * 0.004; }   // a steady hum slowly becomes the new floor
@@ -16379,13 +16397,14 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
   function stopLive(){
     if (!live) return;
     live = false; clearTimeout(speakTimer);
+    if (stopSpeech) stopSpeech();
     try { if ('speechSynthesis' in window) window.speechSynthesis.cancel(); } catch(e){}
     releaseMic();
     if (phase !== 'busy') setPhase('idle'); else root.classList.remove('live');
   }
   function toggleLive(){
     if (!live){ show(); startLive(); return; }
-    if (phase === 'speak'){ clearTimeout(speakTimer); try { window.speechSynthesis.cancel(); } catch(e){} resume(); return; }   // interrupt and talk
+    if (phase === 'speak'){ if (stopSpeech) stopSpeech(); resume(); return; }   // interrupt and talk
     stopLive();
   }
 
@@ -16413,7 +16432,7 @@ body.transfer-active .jsl-dd-item.sel{ color:#1d4ed8; }
   $('jv-speak').addEventListener('click', function(){
     speak = !speak; this.setAttribute('aria-pressed', speak ? 'true' : 'false');
     try { localStorage.setItem('jsl_voice_speak', speak ? '1' : '0'); } catch(e){}
-    if (!speak && phase === 'speak'){ clearTimeout(speakTimer); try { window.speechSynthesis.cancel(); } catch(e){} resume(); }
+    if (!speak && phase === 'speak'){ if (stopSpeech) stopSpeech(); resume(); }
   });
 
   // Space = start / end the conversation, anywhere in the Hub except while typing or on a control
